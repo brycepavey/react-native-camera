@@ -11,8 +11,11 @@ import android.support.v4.content.ContextCompat;
 import android.util.SparseArray;
 import android.view.View;
 import android.os.AsyncTask;
+import android.view.ViewGroup;
+
 import com.facebook.react.bridge.*;
 import com.facebook.react.uimanager.ThemedReactContext;
+import com.facebook.react.uimanager.UIManagerModule;
 import com.google.android.cameraview.CameraView;
 import com.google.android.gms.vision.barcode.Barcode;
 import com.google.android.gms.vision.face.Face;
@@ -23,6 +26,7 @@ import com.google.zxing.DecodeHintType;
 import com.google.zxing.MultiFormatReader;
 import com.google.zxing.Result;
 import org.reactnative.barcodedetector.RNBarcodeDetector;
+import org.reactnative.camera.events.RecordingStartedEvent;
 import org.reactnative.camera.tasks.*;
 import org.reactnative.camera.utils.ImageDimensions;
 import org.reactnative.camera.utils.RNFileUtils;
@@ -268,6 +272,7 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
       }
 
       if (super.record(path, maxDuration * 1000, maxFileSize, recordAudio, profile, orientation)) {
+        RNCameraViewHelper.emitRecordingStartedEvent(this, path);
         mVideoRecordedPromise = promise;
       } else {
         promise.reject("E_RECORDING_FAILED", "Starting video recording failed. Another recording might be in progress.");
