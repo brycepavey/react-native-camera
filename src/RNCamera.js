@@ -446,6 +446,12 @@ export default class Camera extends React.Component<PropsType, StateType> {
     return this.props.children;
   };
 
+  _onRecordingStarted = ({ nativeEvent }: EventCallbackArgumentsType) => {
+    if (this.props.onRecordingStarted) {
+      this.props.onRecordingStarted(nativeEvent);
+    } 
+  }
+
   render() {
     const { style, ...nativeProps } = this._convertNativeProps(this.props);
 
@@ -456,6 +462,7 @@ export default class Camera extends React.Component<PropsType, StateType> {
             {...nativeProps}
             style={StyleSheet.absoluteFill}
             ref={this._setReference}
+            onRecordingStarted={this._onRecordingStarted}
             onMountError={this._onMountError}
             onCameraReady={this._onCameraReady}
             onGoogleVisionBarcodesDetected={this._onObjectDetected(
