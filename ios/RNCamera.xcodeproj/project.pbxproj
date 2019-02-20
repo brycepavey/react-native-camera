@@ -23,7 +23,6 @@
 		71D5C72B201B8A320030A15E /* RNFaceDetectorModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 7147DBB520155340003C59C3 /* RNFaceDetectorModule.m */; };
 		71D5C72C201B8A360030A15E /* RNFaceDetectorManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 7147DBB22015319E003C59C3 /* RNFaceDetectorManager.m */; };
 		9FE592B31CA3CBF500788287 /* RCTSensorOrientationChecker.m in Sources */ = {isa = PBXBuildFile; fileRef = 9FE592B21CA3CBF500788287 /* RCTSensorOrientationChecker.m */; };
-		BE5BED18A827BFAA7A641555 /* libPods-RNCamera.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 12B6FED30E3891CBF0693DAE /* libPods-RNCamera.a */; };
 		F8393BEC21469C0000AB1995 /* RNSensorOrientationChecker.m in Sources */ = {isa = PBXBuildFile; fileRef = F8393BEB21469C0000AB1995 /* RNSensorOrientationChecker.m */; };
 /* End PBXBuildFile section */
 
@@ -42,7 +41,6 @@
 /* Begin PBXFileReference section */
 		0314E39B1B661A0C0092D183 /* CameraFocusSquare.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CameraFocusSquare.h; sourceTree = "<group>"; };
 		0314E39C1B661A460092D183 /* CameraFocusSquare.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CameraFocusSquare.m; sourceTree = "<group>"; };
-		12B6FED30E3891CBF0693DAE /* libPods-RNCamera.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RNCamera.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4107012F1ACB723B00C6AA39 /* libRNCamera.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libRNCamera.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		410701471ACB732B00C6AA39 /* RCTCamera.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RCTCamera.h; sourceTree = "<group>"; };
 		410701481ACB732B00C6AA39 /* RCTCamera.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RCTCamera.m; sourceTree = "<group>"; };
@@ -71,10 +69,8 @@
 		71C7FFD22013C817006EB75A /* RNImageUtils.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RNImageUtils.m; sourceTree = "<group>"; };
 		71C7FFD42013C824006EB75A /* RNFileSystem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RNFileSystem.h; sourceTree = "<group>"; };
 		71C7FFD52013C824006EB75A /* RNFileSystem.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RNFileSystem.m; sourceTree = "<group>"; };
-		856B95B8C4E067087F072475 /* Pods-RNCamera.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RNCamera.debug.xcconfig"; path = "Pods/Target Support Files/Pods-RNCamera/Pods-RNCamera.debug.xcconfig"; sourceTree = "<group>"; };
 		9FE592B11CA3CBF500788287 /* RCTSensorOrientationChecker.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RCTSensorOrientationChecker.h; sourceTree = "<group>"; };
 		9FE592B21CA3CBF500788287 /* RCTSensorOrientationChecker.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RCTSensorOrientationChecker.m; sourceTree = "<group>"; };
-		D84657D70FE6BCDD31026B53 /* Pods-RNCamera.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RNCamera.release.xcconfig"; path = "Pods/Target Support Files/Pods-RNCamera/Pods-RNCamera.release.xcconfig"; sourceTree = "<group>"; };
 		F8393BEA21469C0000AB1995 /* RNSensorOrientationChecker.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RNSensorOrientationChecker.h; sourceTree = "<group>"; };
 		F8393BEB21469C0000AB1995 /* RNSensorOrientationChecker.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RNSensorOrientationChecker.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -84,7 +80,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BE5BED18A827BFAA7A641555 /* libPods-RNCamera.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -94,7 +89,6 @@
 		356FE56951DE40222CD790F4 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				12B6FED30E3891CBF0693DAE /* libPods-RNCamera.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -106,7 +100,6 @@
 				714166162013E1B600EE9FCC /* RN */,
 				714166152013E19D00EE9FCC /* RCT */,
 				410701301ACB723B00C6AA39 /* Products */,
-				6624E9DCA81C30846F89E358 /* Pods */,
 				356FE56951DE40222CD790F4 /* Frameworks */,
 			);
 			sourceTree = "<group>";
@@ -117,15 +110,6 @@
 				4107012F1ACB723B00C6AA39 /* libRNCamera.a */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		6624E9DCA81C30846F89E358 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				856B95B8C4E067087F072475 /* Pods-RNCamera.debug.xcconfig */,
-				D84657D70FE6BCDD31026B53 /* Pods-RNCamera.release.xcconfig */,
-			);
-			name = Pods;
 			sourceTree = "<group>";
 		};
 		714166152013E19D00EE9FCC /* RCT */ = {
@@ -189,7 +173,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 410701411ACB723B00C6AA39 /* Build configuration list for PBXNativeTarget "RNCamera" */;
 			buildPhases = (
-				4937FF32C10D0932ED1E346C /* [CP] Check Pods Manifest.lock */,
 				4107012B1ACB723B00C6AA39 /* Sources */,
 				4107012C1ACB723B00C6AA39 /* Frameworks */,
 				4107012D1ACB723B00C6AA39 /* CopyFiles */,
@@ -233,31 +216,6 @@
 		};
 /* End PBXProject section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		4937FF32C10D0932ED1E346C /* [CP] Check Pods Manifest.lock */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
-				"${PODS_ROOT}/Manifest.lock",
-			);
-			name = "[CP] Check Pods Manifest.lock";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-RNCamera-checkManifestLockResult.txt",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
-/* End PBXShellScriptBuildPhase section */
-
 /* Begin PBXSourcesBuildPhase section */
 		4107012B1ACB723B00C6AA39 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -300,7 +258,6 @@
 		};
 		410701421ACB723B00C6AA39 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 856B95B8C4E067087F072475 /* Pods-RNCamera.debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
@@ -354,7 +311,6 @@
 		};
 		410701431ACB723B00C6AA39 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = D84657D70FE6BCDD31026B53 /* Pods-RNCamera.release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
