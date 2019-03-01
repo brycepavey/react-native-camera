@@ -7,6 +7,7 @@
 #import <React/RCTUtils.h>
 #import <React/UIView+React.h>
 #import  "RNSensorOrientationChecker.h"
+#import <CHDataStructures/CHCircularBuffer.h>
 @interface RNCamera ()
 
 @property (nonatomic, weak) RCTBridge *bridge;
@@ -29,10 +30,23 @@
 @property (nonatomic, copy) NSDate *start;
 @property (nonatomic, retain) NSMutableArray *cameraFeedArray;
 @property (nonatomic, assign) CMTime firstFrameTime;
+@property (nonatomic, retain) NSMutableArray *someArray;
+@property (nonatomic, assign) NSInteger currentArrayIndex;
+@property (nonatomic, assign) NSInteger arrayHead;
+@property (nonatomic, assign) NSInteger arrayTail;
+@property (nonatomic, assign) NSInteger arrayCapacity;
 
 @end
 
+#define incrementIndex(index) (index = (index + 1) % arrayCapacity)
+#define decrementIndex(index) (index = index ? index - 1 : arrayCapacity - 1)
+
+
 @implementation RNCamera
+
+@synthesize currentArrayIndex = _currentArrayIndex;
+@synthesize arrayCapacity = _arrayCapacity;
+
 
 static NSDictionary *defaultFaceDetectorOptions = nil;
 
@@ -46,8 +60,11 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
                                                                                           DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, -1
                                                                                           );
         
-        self.processingQueue = dispatch_queue_create("processingQueue", DISPATCH_QUEUE_SERIAL);
-        //        self.processingQueue = dispatch_queue_create("processingQueue", DISPATCH_QUEUE_CONCURRENT);
+        self.processingQueue = dispatch_queue_create("processingQueue", DISPATCH_QUEUE_CONCURRENT);
+        self.currentArrayIndexQueue = dispatch_queue_create("com.ump.currentArrayIndexQueue", NULL);
+        self.arrayCapacityQueue = dispatch_queue_create("com.ump.arrayCapacityQueue", NULL);
+        self.cameraFeedArrayQueue = dispatch_queue_create("com.ump.cameraFeedArrayQueue", NULL);
+        
         self.sensorOrientationChecker = [RNSensorOrientationChecker new];
         self.textDetector = [self createTextDetector];
         self.finishedReadingText = true;
@@ -69,7 +86,14 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
                                                    object:nil];
         self.autoFocus = -1;
         
-        self.cameraFeedArray = [[NSMutableArray alloc] init];
+        //        self.cameraFeedArray = [[NSMutableArray alloc] init];
+        self.cameraFeedArray = [[NSMutableArray alloc] initWithCapacity:5];
+        self.currentArrayIndex = 0;
+        self.arrayHead = 0;
+        self.arrayTail = 0;
+        self.arrayCapacity = 1800;
+        //        self.someArray = [[NSMutableArray arrayWithCapacity:5] init];
+        //        self.cameraFeedArray = [[CHCircularBuffer alloc] initWithArray:self.someArray];
         
         //        [[NSNotificationCenter defaultCenter] addObserver:self
         //                                                 selector:@selector(bridgeDidForeground:)
@@ -657,11 +681,10 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
 
 - (void)stopRecording
 {
-    NSArray *copyCameraFeed = [self.cameraFeedArray copy];
-    NSDictionary *eventRecordedFrames = @{@"type" : @"RecordedFrames", @"frames" : copyCameraFeed};
-    [self onRequestStream: eventRecordedFrames];
-    
     [self.session stopRunning];
+//    NSArray *copyCameraFeed = [self.cameraFeedArray copy];
+    NSDictionary *eventRecordedFrames = @{@"type" : @"RecordedFrames", @"frames" : self.cameraFeedArray};
+    [self onRequestStream: eventRecordedFrames];
 }
 
 - (void)resumePreview
@@ -1240,21 +1263,72 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     }
 }
 
+- (void)setCurrentArrayIndex:(NSInteger)currentArrayIndex {
+    __block NSInteger tmp;
+    dispatch_barrier_sync(_currentArrayIndexQueue, ^{
+        tmp = currentArrayIndex;
+    });
+    
+    _currentArrayIndex = tmp;
+}
+
+- (void)setVideoFrame:(NSDictionary*)frame {
+    __block NSDictionary *tmp;
+    dispatch_barrier_sync(_cameraFeedArrayQueue, ^{
+        tmp = frame;
+    });
+    
+    [_cameraFeedArray addObject:tmp];
+}
+
+- (void)replaceVideoFrame:(NSDictionary*)frame {
+    __block NSDictionary *tmp;
+    dispatch_barrier_sync(_cameraFeedArrayQueue, ^{
+        tmp = frame;
+    });
+    
+    int insertionIndex = fmodf(self.currentArrayIndex, self.arrayCapacity);
+    [_cameraFeedArray replaceObjectAtIndex:insertionIndex withObject:frame];
+}
+
+- (NSInteger)currentArrayIndex {
+    __block NSInteger tmp;
+    dispatch_sync(_currentArrayIndexQueue, ^{
+        tmp = _currentArrayIndex;
+    });
+    
+    return tmp;
+}
+
+- (NSInteger)arrayCapacity {
+    __block NSInteger tmp;
+    dispatch_sync(_currentArrayIndexQueue, ^{
+        tmp = _arrayCapacity;
+    });
+    
+    return tmp;
+}
+
+
 - (void)captureOutput:(AVCaptureOutput *)captureOutput
 didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
        fromConnection:(AVCaptureConnection *)connection
 {
-    //    dispatch_async(self.processingQueue, ^{
+//    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+//    CVPixelBufferLockBaseAddress(imageBuffer, 0);
+//    uint *baseAddress = CVPixelBufferGetBaseAddress(imageBuffer);
+//    size_t bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
+//    NSData *rawFrame = [[NSData alloc] initWithBytes:(void*)baseAddress length:(_previewLayer.frame.size.height * bytesPerRow)];
+////    [self.cameraFeedArray addObject:rawFrame];
+//    CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
+    
     int32_t preferredTimeScale = 600;
     NSDate *methodFinish = [NSDate date];
     NSTimeInterval timePassed = [methodFinish timeIntervalSinceDate:self.start];
     
     CGSize previewSize = CGSizeMake(_previewLayer.frame.size.width, _previewLayer.frame.size.height);
     UIImage *image = [RNCameraUtils convertBufferToUIImage:sampleBuffer previewSize:previewSize];
-    // take care of the fact that preview dimensions differ from the ones of the image that we submit for text detection
-    float scaleX = _previewLayer.frame.size.width / image.size.width;
-    float scaleY = _previewLayer.frame.size.height / image.size.height;
-    
+
     CMTime frameTime = CMSampleBufferGetOutputPresentationTimeStamp(sampleBuffer);
     
     if(self.firstFrameTime.value == 0) {
@@ -1263,32 +1337,35 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
     
     CMTime presentationTimeStamp = CMTimeSubtract(CMSampleBufferGetPresentationTimeStamp(sampleBuffer), self.firstFrameTime);
     
-    double frameTimeMillisecs = CMTimeGetSeconds(presentationTimeStamp) * 1000;
-    
-    
-    
-    self.start = [NSDate date];
-    
-    id objects[] = { [self encodeToBase64String:image], [NSNumber numberWithDouble:frameTimeMillisecs] };
-    id keys[] = { @"frameData", @"milliseconds"};
-    NSUInteger count = sizeof(objects) / sizeof(id);
-    
-    
-    NSDictionary *frameInfoDict = [NSDictionary dictionaryWithObjects:objects forKeys:keys count: count];
-    
-    [self.cameraFeedArray addObject:frameInfoDict];
-    //    });
-    
-    //        NSArray *textBlocks = [self.textDetector findTextBlocksInFrame:image scaleX:scaleX scaleY:scaleY];
-    //        NSDictionary *eventText = @{@"type" : @"TextBlock", @"textBlocks" : textBlocks};
-    //        [self onText:eventText];
-    
-    //        _finishedReadingText = true;
-    //    }
+    dispatch_async(self.processingQueue, ^{
+        double frameTimeMillisecs = CMTimeGetSeconds(presentationTimeStamp) * 1000;
+        
+    //    NSData *imageData = [AVCaptureStillImageOutput jpegStillImageNSDataRepresentation:sampleBuffer];
+        
+        id objects[] = {[self encodeToBase64String:image], [NSNumber numberWithDouble:frameTimeMillisecs] };
+        id keys[] = { @"frameData", @"milliseconds"};
+        NSUInteger count = sizeof(objects) / sizeof(id);
+        
+        
+        NSDictionary *frameInfoDict = [NSDictionary dictionaryWithObjects:objects forKeys:keys count: count];
+        
+        if([self.cameraFeedArray count] < self.arrayCapacity) {
+//            [self.cameraFeedArray addObject:frameInfoDict];
+            [self setVideoFrame:frameInfoDict];
+            self.arrayTail++;
+        } else {
+//            int insertionIndex = fmodf(self.currentArrayIndex, self.arrayCapacity);
+//            [self.cameraFeedArray replaceObjectAtIndex:insertionIndex withObject:frameInfoDict];
+            [self replaceVideoFrame:frameInfoDict];
+            
+            self.currentArrayIndex++;
+        }
+    });
+//    NSLog(@"%lu", (unsigned long)[self.cameraFeedArray count]);
 }
 
 - (NSString *)encodeToBase64String:(UIImage *)image {
-    return [UIImageJPEGRepresentation(image, 0.5) base64EncodedStringWithOptions:NSDataBase64Encoding64CharacterLineLength];
+    return [UIImageJPEGRepresentation(image, 0.6) base64EncodedStringWithOptions:NSDataBase64Encoding64CharacterLineLength];
 }
 
 
