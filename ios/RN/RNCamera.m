@@ -7,7 +7,7 @@
 #import <React/RCTUtils.h>
 #import <React/UIView+React.h>
 #import  "RNSensorOrientationChecker.h"
-#import <CHDataStructures/CHCircularBuffer.h>
+
 @interface RNCamera ()
 
 @property (nonatomic, weak) RCTBridge *bridge;
