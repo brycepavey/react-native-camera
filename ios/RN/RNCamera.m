@@ -663,6 +663,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
 
 - (void)setupVideoStream
 {
+    [self.cameraFeedArray removeAllObjects];
     self.videoDataOutput = [[AVCaptureVideoDataOutput alloc] init];
     if (![self.session canAddOutput:_videoDataOutput]) {
         NSLog(@"Failed to setup video data output");
@@ -681,8 +682,10 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
 
 - (void)stopRecording
 {
-    [self.session stopRunning];
-//    NSArray *copyCameraFeed = [self.cameraFeedArray copy];
+    //    [self.session stopRunning];
+    [self.session removeOutput:_videoDataOutput];
+    
+    //    NSArray *copyCameraFeed = [self.cameraFeedArray copy];
     NSDictionary *eventRecordedFrames = @{@"type" : @"RecordedFrames", @"frames" : self.cameraFeedArray};
     [self onRequestStream: eventRecordedFrames];
 }
