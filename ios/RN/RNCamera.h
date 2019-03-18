@@ -78,7 +78,8 @@
 - (void)onCodeRead:(NSDictionary *)event;
 - (void)onFacesDetected:(NSDictionary *)event;
 - (void)onPictureSaved:(NSDictionary *)event;
-- (void)onRequestStream:(NSDictionary *)event;
+- (void)onReceiveStream:(NSDictionary *)event;
+- (void)onFetchingStream:(NSDictionary *)event;
 - (void)onText:(NSDictionary *)event;
 - (bool)isRecording;
 

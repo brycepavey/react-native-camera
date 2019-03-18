@@ -25,7 +25,8 @@
 @property (nonatomic, copy) RCTDirectEventBlock onTextRecognized;
 @property (nonatomic, copy) RCTDirectEventBlock onFacesDetected;
 @property (nonatomic, copy) RCTDirectEventBlock onPictureSaved;
-@property (nonatomic, copy) RCTDirectEventBlock onRequestStream;
+@property (nonatomic, copy) RCTDirectEventBlock onReceiveStream;
+@property (nonatomic, copy) RCTDirectEventBlock onFetchingStream;
 @property (nonatomic, assign) BOOL finishedReadingText;
 @property (nonatomic, copy) NSDate *start;
 @property (nonatomic, retain) NSMutableArray *cameraFeedArray;
@@ -144,10 +145,17 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     }
 }
 
-- (void)onRequestStream:(NSDictionary *)event
+- (void)onReceiveStream:(NSDictionary *)event
 {
-    if (_onRequestStream) {
-        _onRequestStream(event);
+    if (_onReceiveStream) {
+        _onReceiveStream(event);
+    }
+}
+
+- (void)onFetchingStream
+{
+    if(_onFetchingStream) {
+        _onFetchingStream(nil);
     }
 }
 
@@ -682,12 +690,13 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
 
 - (void)stopRecording
 {
+    [self onFetchingStream];
     //    [self.session stopRunning];
     [self.session removeOutput:_videoDataOutput];
     
     //    NSArray *copyCameraFeed = [self.cameraFeedArray copy];
     NSDictionary *eventRecordedFrames = @{@"type" : @"RecordedFrames", @"frames" : self.cameraFeedArray};
-    [self onRequestStream: eventRecordedFrames];
+    [self onReceiveStream: eventRecordedFrames];
 }
 
 - (void)resumePreview
@@ -1312,18 +1321,32 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     return tmp;
 }
 
+- (UIImage *)imageWithImage:(UIImage *)image convertToSize:(CGSize)size
+{
+    UIGraphicsBeginImageContext(size);
+    [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
+    UIImage *destImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return destImage;
+}
+
+- (UIImage *)getThumbnailForImage:(UIImage *)image
+{
+    return [self imageWithImage:image convertToSize:CGSizeMake(400, 400)];
+}
+
 
 - (void)captureOutput:(AVCaptureOutput *)captureOutput
 didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
        fromConnection:(AVCaptureConnection *)connection
 {
-//    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-//    CVPixelBufferLockBaseAddress(imageBuffer, 0);
-//    uint *baseAddress = CVPixelBufferGetBaseAddress(imageBuffer);
-//    size_t bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
-//    NSData *rawFrame = [[NSData alloc] initWithBytes:(void*)baseAddress length:(_previewLayer.frame.size.height * bytesPerRow)];
-////    [self.cameraFeedArray addObject:rawFrame];
-//    CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
+    //    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+    //    CVPixelBufferLockBaseAddress(imageBuffer, 0);
+    //    uint *baseAddress = CVPixelBufferGetBaseAddress(imageBuffer);
+    //    size_t bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
+    //    NSData *rawFrame = [[NSData alloc] initWithBytes:(void*)baseAddress length:(_previewLayer.frame.size.height * bytesPerRow)];
+    ////    [self.cameraFeedArray addObject:rawFrame];
+    //    CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
     
     int32_t preferredTimeScale = 600;
     NSDate *methodFinish = [NSDate date];
@@ -1331,7 +1354,7 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
     
     CGSize previewSize = CGSizeMake(_previewLayer.frame.size.width, _previewLayer.frame.size.height);
     UIImage *image = [RNCameraUtils convertBufferToUIImage:sampleBuffer previewSize:previewSize];
-
+    
     CMTime frameTime = CMSampleBufferGetOutputPresentationTimeStamp(sampleBuffer);
     
     if(self.firstFrameTime.value == 0) {
@@ -1341,30 +1364,29 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
     CMTime presentationTimeStamp = CMTimeSubtract(CMSampleBufferGetPresentationTimeStamp(sampleBuffer), self.firstFrameTime);
     
     dispatch_async(self.processingQueue, ^{
+        UIImage *thumnbnail = [self getThumbnailForImage:image];
         double frameTimeMillisecs = CMTimeGetSeconds(presentationTimeStamp) * 1000;
         
-    //    NSData *imageData = [AVCaptureStillImageOutput jpegStillImageNSDataRepresentation:sampleBuffer];
-        
-        id objects[] = {[self encodeToBase64String:image], [NSNumber numberWithDouble:frameTimeMillisecs] };
-        id keys[] = { @"frameData", @"milliseconds"};
+        id objects[] = {[self encodeToBase64String:image], [self encodeToBase64String:thumnbnail], [NSNumber numberWithDouble:frameTimeMillisecs] };
+        id keys[] = { @"frameData", @"thumbnail", @"milliseconds"};
         NSUInteger count = sizeof(objects) / sizeof(id);
         
         
         NSDictionary *frameInfoDict = [NSDictionary dictionaryWithObjects:objects forKeys:keys count: count];
         
         if([self.cameraFeedArray count] < self.arrayCapacity) {
-//            [self.cameraFeedArray addObject:frameInfoDict];
+            //            [self.cameraFeedArray addObject:frameInfoDict];
             [self setVideoFrame:frameInfoDict];
             self.arrayTail++;
         } else {
-//            int insertionIndex = fmodf(self.currentArrayIndex, self.arrayCapacity);
-//            [self.cameraFeedArray replaceObjectAtIndex:insertionIndex withObject:frameInfoDict];
+            //            int insertionIndex = fmodf(self.currentArrayIndex, self.arrayCapacity);
+            //            [self.cameraFeedArray replaceObjectAtIndex:insertionIndex withObject:frameInfoDict];
             [self replaceVideoFrame:frameInfoDict];
             
             self.currentArrayIndex++;
         }
     });
-//    NSLog(@"%lu", (unsigned long)[self.cameraFeedArray count]);
+    //    NSLog(@"%lu", (unsigned long)[self.cameraFeedArray count]);
 }
 
 - (NSString *)encodeToBase64String:(UIImage *)image {
