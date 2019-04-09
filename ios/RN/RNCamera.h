@@ -20,6 +20,11 @@
 @interface RNCamera : UIView <AVCaptureMetadataOutputObjectsDelegate, AVCaptureFileOutputRecordingDelegate, RNFaceDetectorDelegate, AVCaptureVideoDataOutputSampleBufferDelegate>
 
 @property(nonatomic, strong) dispatch_queue_t sessionQueue;
+@property(nonatomic, strong) dispatch_queue_t processingQueue;
+@property(nonatomic, strong) dispatch_queue_t videoProcessingQueue;
+@property(nonatomic, strong) dispatch_queue_t currentArrayIndexQueue;
+@property(nonatomic, strong) dispatch_queue_t arrayCapacityQueue;
+@property(nonatomic, strong) dispatch_queue_t cameraFeedArrayQueue;
 @property(nonatomic, strong) AVCaptureSession *session;
 @property(nonatomic, strong) AVCaptureDeviceInput *videoCaptureDeviceInput;
 @property(nonatomic, strong) AVCaptureStillImageOutput *stillImageOutput;
@@ -74,6 +79,8 @@
 - (void)onCodeRead:(NSDictionary *)event;
 - (void)onFacesDetected:(NSDictionary *)event;
 - (void)onPictureSaved:(NSDictionary *)event;
+- (void)onReceiveStream:(NSDictionary *)event;
+- (void)onFetchingStream:(NSDictionary *)event;
 - (void)onText:(NSDictionary *)event;
 - (bool)isRecording;
 
