@@ -352,6 +352,26 @@ RCT_REMAP_METHOD(stopRecording, reactTag:(nonnull NSNumber *)reactTag)
     }];
 }
 
+RCT_REMAP_METHOD(outputVideo,
+                 withOutputOptions:(NSDictionary *)options
+                 reactTag:(nonnull NSNumber *)reactTag
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject)
+{
+#if TARGET_IPHONE_SIMULATOR
+    reject(@"E_RECORDING_FAILED", @"Video recording is not supported on a simulator.", nil);
+    return;
+#endif
+    [self.bridge.uiManager addUIBlock:^(__unused RCTUIManager *uiManager, NSDictionary<NSNumber *, RNCamera *> *viewRegistry) {
+        RNCamera *view = viewRegistry[reactTag];
+        if (![view isKindOfClass:[RNCamera class]]) {
+            RCTLogError(@"Invalid view returned from registry, expecting RNCamera, got: %@", view);
+        } else {
+            [view generateVideoWithOptions:options resolve:resolve reject:reject];
+        }
+    }];
+}
+
 RCT_EXPORT_METHOD(checkDeviceAuthorizationStatus:(RCTPromiseResolveBlock)resolve
                   reject:(__unused RCTPromiseRejectBlock)reject) {
     __block NSString *mediaType = AVMediaTypeVideo;

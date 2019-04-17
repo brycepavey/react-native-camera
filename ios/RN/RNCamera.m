@@ -50,6 +50,7 @@ CVReturn PixelBufferCreateFromImage(CGImageRef imageRef, CVPixelBufferRef *outBu
 @property (nonatomic, copy) RCTDirectEventBlock onFacesDetected;
 @property (nonatomic, copy) RCTDirectEventBlock onPictureSaved;
 @property (nonatomic, copy) RCTDirectEventBlock onReceiveStream;
+@property (nonatomic, copy) RCTDirectEventBlock onReceiveOutput;
 @property (nonatomic, copy) RCTDirectEventBlock onFetchingStream;
 @property (nonatomic, assign) BOOL finishedReadingText;
 @property (nonatomic, copy) NSDate *start;
@@ -174,6 +175,14 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
 {
     if (_onReceiveStream) {
         _onReceiveStream(event);
+    }
+}
+
+- (void)onReceiveOutput:(NSDictionary *)event
+{
+    if (_onReceiveOutput)
+    {
+        _onReceiveOutput(event);
     }
 }
 
@@ -588,7 +597,8 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
         }
     }];
 }
-- (void)recordWithOrientation:(NSDictionary *)options resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject{
+- (void)recordWithOrientation:(NSDictionary *)options resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
     [self.sensorOrientationChecker getDeviceOrientationWithBlock:^(UIInterfaceOrientation orientation) {
         NSMutableDictionary *tmpOptions = [options mutableCopy];
         if ([tmpOptions valueForKey:@"orientation"] == nil) {
@@ -722,16 +732,46 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     
     __weak RNCamera *weakSelf = self;
     [self createVideoWithImagesWithCompletionBlock:^(NSString * filePath, NSError *error) {
-        NSDictionary *eventRecordedFrames = @{@"type" : @"RecordedFrames",
+        NSDictionary *eventRecordedFrames = @{
+                                              @"type" : @"RecordedFrames",
                                               @"frames" : self.cameraFeedArray,
                                               @"filepath" : filePath
                                               };
         [weakSelf onReceiveStream: eventRecordedFrames];
     }];
-    
-    
-    
 }
+
+-(void)generateVideoWithOptions:(NSDictionary *)options resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+    __weak RNCamera *weakSelf = self;
+    NSNumber *startTime = options[@"startTimestamp"];
+    NSNumber *endTime = options[@"endTimestamp"];
+    
+    if (!startTime || !endTime) {
+//        reject("Incorrect Arguments: {startTimestamp , endTimestamp} must be included");
+        reject(@"E_VIDEO_FILE_OUTPUT_FAILED", @"Incorrect Arguments: {startTimestamp , endTimestamp} must be included", [NSError new]);
+        return;
+    }
+    
+    [self createVideoWithName:@"output" FromTimestamp:[startTime doubleValue]
+                                                       toTimestamp:[endTime doubleValue]
+          withCompletionBlock:^(NSString *filePath, NSError *error){
+        if (error) {
+            NSLog(@"%@", error.localizedDescription);
+            reject(@"E_VIDEO_FILE_OUTPUT_FAILED", @"File generation failed with error", error);
+//            reject([NSString stringWithFormat:@"%@", error.localizedDescription])
+            return;
+        }
+              
+        NSDictionary *eventRecordedFrames = @{
+                                              @"type" : @"OutputFile",
+                                              @"filepath" : filePath
+                                              };
+        [weakSelf onReceiveOutput: eventRecordedFrames];
+              resolve(eventRecordedFrames);
+    }];
+}
+
 
 - (void)resumePreview
 {
@@ -1400,7 +1440,7 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
     dispatch_async(self.processingQueue, ^{
         UIImage *thumnbnail = [self getThumbnailForImage:image];
         double frameTimeMillisecs = CMTimeGetSeconds(presentationTimeStamp) * 1000;
-        
+    
         NSArray * objects = @[image, [self encodeToBase64String:thumnbnail], [NSNumber numberWithDouble:frameTimeMillisecs]];
         NSArray * keys =  @[@"frameData", @"thumbnail", @"milliseconds"];
 
@@ -1424,30 +1464,44 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
 
 -(NSString *)createVideoWithImagesWithCompletionBlock: (void(^)(NSString *, NSError *))completionBlock
 {
+    return [self createVideoWithName:@"test" FromTimestamp:0 toTimestamp:CGFLOAT_MAX withCompletionBlock:completionBlock];
+}
+
+
+-(NSString *)createVideoWithName:(NSString *)filename FromTimestamp:(double)startTimestamp toTimestamp:(double)endTimestamp withCompletionBlock:(void(^)(NSString*, NSError *))completionBlock
+{
     NSString *documentsDirectoryPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex:0];
     NSArray *dirContents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:documentsDirectoryPath error:nil];
+    
+    NSString *targetFilename = [NSString stringWithFormat:@"%@.mp4", filename];
     for (NSString *tString in dirContents)
     {
-        if ([tString isEqualToString:@"test.mp4"])
+        if ([tString isEqualToString:targetFilename])
         {
             [[NSFileManager defaultManager]removeItemAtPath:[NSString stringWithFormat:@"%@/%@",documentsDirectoryPath,tString] error:nil];
         }
     }
     
-    NSString *targetPath = [NSString stringWithFormat:@"%@/%@",documentsDirectoryPath,@"test.mp4"];
+    NSString *targetPath = [NSString stringWithFormat:@"%@/%@",documentsDirectoryPath,targetFilename];
     
     NSLog(@"Write Started");
     
     NSError *error = nil;
-    NSArray *sortedArray = [self.cameraFeedArray sortedArrayUsingComparator:^NSComparisonResult(NSDictionary * obj1, NSDictionary * obj2) {
-        return [obj1[@"milliseconds"] compare:obj2[@"milliseconds"]];
+    NSPredicate *timerangePredicate = [NSPredicate predicateWithBlock:^BOOL(NSDictionary * evaluatedObject, NSDictionary<NSString *,id> * _Nullable bindings) {
+        double milliseconds = [(NSNumber *)evaluatedObject[@"milliseconds"] doubleValue];
+        return milliseconds >= startTimestamp && milliseconds <= endTimestamp;
     }];
+    NSArray *sortedArray = [[self.cameraFeedArray sortedArrayUsingComparator:^NSComparisonResult(NSDictionary * obj1, NSDictionary * obj2) {
+        return [obj1[@"milliseconds"] compare:obj2[@"milliseconds"]];
+    }] filteredArrayUsingPredicate: timerangePredicate];
+    
     NSUInteger baseTimestamp = [[sortedArray firstObject][@"milliseconds"] unsignedIntegerValue];
+    
     UIImage *baseImage = [sortedArray firstObject][@"frameData"];
     
     AVAssetWriter *videoWriter = [[AVAssetWriter alloc] initWithURL:
                                   [NSURL fileURLWithPath: targetPath]
-                                                fileType:AVFileTypeMPEG4
+                                                           fileType:AVFileTypeMPEG4
                                                               error:&error];
     
     NSDictionary *videoSettings = [NSDictionary dictionaryWithObjectsAndKeys:
@@ -1458,8 +1512,8 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
     
     
     AVAssetWriterInput* videoWriterInput = [AVAssetWriterInput
-                                             assetWriterInputWithMediaType:AVMediaTypeVideo
-                                             outputSettings:videoSettings];
+                                            assetWriterInputWithMediaType:AVMediaTypeVideo
+                                            outputSettings:videoSettings];
     
     NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
                                 [NSNumber numberWithUnsignedInt:kCVPixelFormatType_32ARGB], (NSString*)kCVPixelBufferPixelFormatTypeKey,
@@ -1473,7 +1527,7 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
     //Start a session:
     [videoWriter startWriting];
     [videoWriter startSessionAtSourceTime:kCMTimeZero];
-
+    
     
     //convert uiimage to CGImage.
     
@@ -1504,8 +1558,8 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
             completionBlock ? completionBlock(targetPath, videoWriter.error ): nil;
         }];
     }];
-                                  
-                                  return targetPath;
+    
+    return targetPath;
 }
 
 

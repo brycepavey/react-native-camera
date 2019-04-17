@@ -69,6 +69,7 @@
 - (void)takePictureWithOrientation:(NSDictionary *)options resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject;
 - (void)record:(NSDictionary *)options resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject;
 - (void)recordWithOrientation:(NSDictionary *)options resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject;
+-(void)generateVideoWithOptions:(NSDictionary *)options resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
 - (void)stopRecording;
 - (void)resumePreview;
 - (void)pausePreview;
@@ -80,6 +81,7 @@
 - (void)onFacesDetected:(NSDictionary *)event;
 - (void)onPictureSaved:(NSDictionary *)event;
 - (void)onReceiveStream:(NSDictionary *)event;
+- (void)onReceiveOutput:(NSDictionary *)event;
 - (void)onFetchingStream:(NSDictionary *)event;
 - (void)onText:(NSDictionary *)event;
 - (bool)isRecording;
