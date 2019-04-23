@@ -753,7 +753,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
         return;
     }
     
-    [self createVideoWithName:@"output" FromTimestamp:[startTime doubleValue]
+    [self createVideoWithName:[[NSUUID UUID] UUIDString] FromTimestamp:[startTime doubleValue]
                                                        toTimestamp:[endTime doubleValue]
           withCompletionBlock:^(NSString *filePath, NSError *error){
         if (error) {
@@ -1464,7 +1464,7 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
 
 -(NSString *)createVideoWithImagesWithCompletionBlock: (void(^)(NSString *, NSError *))completionBlock
 {
-    return [self createVideoWithName:@"test" FromTimestamp:0 toTimestamp:CGFLOAT_MAX withCompletionBlock:completionBlock];
+    return [self createVideoWithName:@"temp" FromTimestamp:0 toTimestamp:CGFLOAT_MAX withCompletionBlock:completionBlock];
 }
 
 
