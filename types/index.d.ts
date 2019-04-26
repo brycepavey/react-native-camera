@@ -279,11 +279,17 @@ interface RecordResponse {
   codec: VideoCodec[keyof VideoCodec];
 }
 
+interface OutputResponse {
+  type: string;
+  filepath: string
+}
+
 export class RNCamera extends Component<RNCameraProps & ViewProperties> {
   static Constants: Constants;
 
   takePictureAsync(options?: TakePictureOptions): Promise<TakePictureResponse>;
   recordAsync(options?: RecordOptions): Promise<RecordResponse>;
+  outputVideo(options?: OutputOptions): Promise<OutputResponse>;
   stopRecording(): void;
   pausePreview(): void;
   resumePreview(): void;

@@ -74,6 +74,12 @@ type RecordingOptions = {
   path?: string,
 };
 
+type OutputOptions = {
+  startTimestamp?: number,
+  endTimestamp?: number
+};
+
+
 type EventCallbackArgumentsType = {
   nativeEvent: Object,
 };
@@ -322,6 +328,11 @@ export default class Camera extends React.Component<PropsType, StateType> {
     return await CameraManager.getAvailablePictureSizes(this.props.ratio, this._cameraHandle);
   };
 
+  async outputVideo(options?: OutputOptions) 
+  {
+     return await CameraManager.outputVideo(options, this._cameraHandle)
+  }
+
   async recordAsync(options?: RecordingOptions) {
     if (!options || typeof options !== 'object') {
       options = {};
@@ -358,6 +369,8 @@ export default class Camera extends React.Component<PropsType, StateType> {
   isRecording() {
     return CameraManager.isRecording(this._cameraHandle);
   }
+
+ 
 
   resumePreview() {
     CameraManager.resumePreview(this._cameraHandle);
