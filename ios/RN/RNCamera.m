@@ -118,7 +118,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
         self.currentArrayIndex = 0;
         self.arrayHead = 0;
         self.arrayTail = 0;
-        self.arrayCapacity = 30 * 5; //seconds
+        self.arrayCapacity = 30 * 60; //fps * seconds
         //        self.someArray = [[NSMutableArray arrayWithCapacity:5] init];
         //        self.cameraFeedArray = [[CHCircularBuffer alloc] initWithArray:self.someArray];
         
