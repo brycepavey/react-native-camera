@@ -18,6 +18,8 @@ RCT_EXPORT_VIEW_PROPERTY(onBarCodeRead, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onFacesDetected, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onPictureSaved, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onTextRecognized, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onFetchingStream, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onReceiveStream, RCTDirectEventBlock);
 
 + (BOOL)requiresMainQueueSetup
 {
@@ -74,7 +76,7 @@ RCT_EXPORT_VIEW_PROPERTY(onTextRecognized, RCTDirectEventBlock);
 
 - (NSArray<NSString *> *)supportedEvents
 {
-    return @[@"onCameraReady", @"onMountError", @"onBarCodeRead", @"onFacesDetected", @"onPictureSaved", @"onTextRecognized"];
+    return @[@"onCameraReady", @"onMountError", @"onBarCodeRead", @"onFacesDetected", @"onPictureSaved", @"onTextRecognized", @"onFetchingStream", @"onReceiveStream"];
 }
 
 + (NSDictionary *)validCodecTypes

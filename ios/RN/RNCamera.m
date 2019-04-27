@@ -118,7 +118,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
         self.currentArrayIndex = 0;
         self.arrayHead = 0;
         self.arrayTail = 0;
-        self.arrayCapacity = 30 * 5; //seconds
+        self.arrayCapacity = 30 * 60; //fps * seconds
         //        self.someArray = [[NSMutableArray arrayWithCapacity:5] init];
         //        self.cameraFeedArray = [[CHCircularBuffer alloc] initWithArray:self.someArray];
         
@@ -186,7 +186,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     }
 }
 
-- (void)onFetchingStream
+- (void)onFetchingStream:(NSDictionary *)event
 {
     if(_onFetchingStream) {
         _onFetchingStream(nil);
@@ -725,10 +725,12 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
 
 - (void)stopRecording
 {
-    [self onFetchingStream];
+    [self onFetchingStream: nil];
     //    [self.session stopRunning];
     [self.session removeOutput:_videoDataOutput];
     //    NSArray *copyCameraFeed = [self.cameraFeedArray copy];
+    
+    [self.cameraFeedArray sortUsingDescriptors:@[[NSSortDescriptor sortDescriptorWithKey:@"milliseconds" ascending:YES]]];
     
     __weak RNCamera *weakSelf = self;
     [self createVideoWithImagesWithCompletionBlock:^(NSString * filePath, NSError *error) {
