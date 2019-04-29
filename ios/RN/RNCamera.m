@@ -1397,52 +1397,28 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     return tmp;
 }
 
-- (UIImage *)imageByCroppingImage:(UIImage *)image toSize:(CGSize)size
-{
-    UIGraphicsBeginImageContext(size);
-    [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
-    UIImage *destImage = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    return destImage;
+- (UIImage *)cropImage:(UIImage *)image fromCenterWithSize:(CGSize)size{
+    float imageWidth    = image.size.width;
+    float imageHeight   = image.size.height;
+    float scaleToWidth  = size.width;
+    float scaleToHeight = size.height;
     
-    
-    double newCropWidth, newCropHeight;
-    
-    //=== To crop more efficently =====//
-    if(image.size.width < image.size.height){
-        if (image.size.width < size.width) {
-            newCropWidth = size.width;
-        }
-        else {
-            newCropWidth = image.size.width;
-        }
-        newCropHeight = (newCropWidth * size.height)/size.width;
-    } else {
-        if (image.size.height < size.height) {
-            newCropHeight = size.height;
-        }
-        else {
-            newCropHeight = image.size.height;
-        }
-        newCropWidth = (newCropHeight * size.width)/size.height;
+    if (imageHeight < scaleToHeight || imageWidth < scaleToWidth) {
+        NSLog(@"[WARNING] %@ image was not cropped because is smaller than container" );
     }
-    //==============================//
     
-    double x = image.size.width/2.0 - newCropWidth/2.0;
-    double y = image.size.height/2.0 - newCropHeight/2.0;
-    
-    CGRect cropRect = CGRectMake(x, y, newCropWidth, newCropHeight);
-    CGImageRef imageRef = CGImageCreateWithImageInRect([image CGImage], cropRect);
-    
-    UIImage *cropped = [UIImage imageWithCGImage:imageRef];
+    CGRect cropRect       = CGRectMake((imageWidth/2 - scaleToWidth/2), (imageHeight/2 - scaleToHeight/2), scaleToWidth, scaleToHeight);
+    CGImageRef imageRef   = CGImageCreateWithImageInRect([image CGImage], cropRect);
+    UIImage *croppedImage = [UIImage imageWithCGImage:imageRef];
     CGImageRelease(imageRef);
     
-    return cropped;
+    return croppedImage;
+
 }
 
 - (UIImage *)getThumbnailForImage:(UIImage *)image
 {
-    return [self imageByCroppingImage:image toSize:CGSizeMake(400, 400)];
+    return [self cropImage:image fromCenterWithSize:CGSizeMake(400, 400)];
 }
 
 
