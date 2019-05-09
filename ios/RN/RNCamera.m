@@ -708,6 +708,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
 {
     [self.cameraFeedArray removeAllObjects];
     self.videoDataOutput = [[AVCaptureVideoDataOutput alloc] init];
+    self.firstFrameTime = kCMTimeZero;
     if (![self.session canAddOutput:_videoDataOutput]) {
         NSLog(@"Failed to setup video data output");
         [self stopTextRecognition];
