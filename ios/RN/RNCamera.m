@@ -1398,18 +1398,28 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     return tmp;
 }
 
-- (UIImage *)imageWithImage:(UIImage *)image convertToSize:(CGSize)size
-{
-    UIGraphicsBeginImageContext(size);
-    [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
-    UIImage *destImage = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    return destImage;
+- (UIImage *)cropImage:(UIImage *)image fromCenterWithSize:(CGSize)size{
+    float imageWidth    = image.size.width;
+    float imageHeight   = image.size.height;
+    float scaleToWidth  = size.width;
+    float scaleToHeight = size.height;
+    
+    if (imageHeight < scaleToHeight || imageWidth < scaleToWidth) {
+        NSLog(@"[WARNING] %@ image was not cropped because is smaller than container" );
+    }
+    
+    CGRect cropRect       = CGRectMake((imageWidth/2 - scaleToWidth/2), (imageHeight/2 - scaleToHeight/2), scaleToWidth, scaleToHeight);
+    CGImageRef imageRef   = CGImageCreateWithImageInRect([image CGImage], cropRect);
+    UIImage *croppedImage = [UIImage imageWithCGImage:imageRef];
+    CGImageRelease(imageRef);
+    
+    return croppedImage;
+
 }
 
 - (UIImage *)getThumbnailForImage:(UIImage *)image
 {
-    return [self imageWithImage:image convertToSize:CGSizeMake(400, 400)];
+    return [self cropImage:image fromCenterWithSize:CGSizeMake(400, 400)];
 }
 
 
