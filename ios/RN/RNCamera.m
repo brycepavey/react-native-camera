@@ -1405,7 +1405,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     float scaleToHeight = size.height;
     
     if (imageHeight < scaleToHeight || imageWidth < scaleToWidth) {
-        NSLog(@"[WARNING] %@ image was not cropped because is smaller than container" );
+        NSLog(@"[WARNING] image was not cropped because is smaller than container" );
     }
     
     CGRect cropRect       = CGRectMake((imageWidth/2 - scaleToWidth/2), (imageHeight/2 - scaleToHeight/2), scaleToWidth, scaleToHeight);
