@@ -61,6 +61,8 @@ CVReturn PixelBufferCreateFromImage(CGImageRef imageRef, CVPixelBufferRef *outBu
 @property (nonatomic, assign) NSInteger arrayHead;
 @property (nonatomic, assign) NSInteger arrayTail;
 @property (nonatomic, assign) NSInteger arrayCapacity;
+@property (nonatomic, strong) AVAssetWriterInput *videoWriterInput;
+@property (nonatomic, strong) AVAssetWriter *videoWriter;
 
 @end
 
@@ -733,15 +735,24 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     
     [self.cameraFeedArray sortUsingDescriptors:@[[NSSortDescriptor sortDescriptorWithKey:@"milliseconds" ascending:YES]]];
     
+    __block NSMutableArray *cameraFramesArray = [NSMutableArray new];
+
+    [self.cameraFeedArray enumerateObjectsUsingBlock:^(NSDictionary * obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        NSMutableDictionary *newDict = obj.mutableCopy;
+        [newDict removeObjectForKey:@"frameData"];
+        [cameraFramesArray addObject:newDict.copy];
+    }];
+    
     __weak RNCamera *weakSelf = self;
     [self createVideoWithImagesWithCompletionBlock:^(NSString * filePath, NSError *error) {
         NSDictionary *eventRecordedFrames = @{
                                               @"type" : @"RecordedFrames",
-                                              @"frames" : self.cameraFeedArray,
+                                              @"frames" : cameraFramesArray.copy,
                                               @"filepath" : filePath
                                               };
         [weakSelf onReceiveStream: eventRecordedFrames];
     }];
+    
 }
 
 -(void)generateVideoWithOptions:(NSDictionary *)options resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
@@ -751,28 +762,28 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     NSNumber *endTime = options[@"endTimestamp"];
     
     if (!startTime || !endTime) {
-//        reject("Incorrect Arguments: {startTimestamp , endTimestamp} must be included");
+        //        reject("Incorrect Arguments: {startTimestamp , endTimestamp} must be included");
         reject(@"E_VIDEO_FILE_OUTPUT_FAILED", @"Incorrect Arguments: {startTimestamp , endTimestamp} must be included", [NSError new]);
         return;
     }
     
     [self createVideoWithName:[[NSUUID UUID] UUIDString] FromTimestamp:[startTime doubleValue]
-                                                       toTimestamp:[endTime doubleValue]
+                  toTimestamp:[endTime doubleValue]
           withCompletionBlock:^(NSString *filePath, NSError *error){
-        if (error) {
-            NSLog(@"%@", error.localizedDescription);
-            reject(@"E_VIDEO_FILE_OUTPUT_FAILED", @"File generation failed with error", error);
-//            reject([NSString stringWithFormat:@"%@", error.localizedDescription])
-            return;
-        }
+              if (error) {
+                  NSLog(@"%@", error.localizedDescription);
+                  reject(@"E_VIDEO_FILE_OUTPUT_FAILED", @"File generation failed with error", error);
+                  //            reject([NSString stringWithFormat:@"%@", error.localizedDescription])
+                  return;
+              }
               
-        NSDictionary *eventRecordedFrames = @{
-                                              @"type" : @"OutputFile",
-                                              @"filepath" : filePath
-                                              };
-        [weakSelf onReceiveOutput: eventRecordedFrames];
+              NSDictionary *eventRecordedFrames = @{
+                                                    @"type" : @"OutputFile",
+                                                    @"filepath" : filePath
+                                                    };
+              [weakSelf onReceiveOutput: eventRecordedFrames];
               resolve(eventRecordedFrames);
-    }];
+          }];
 }
 
 
@@ -1414,7 +1425,7 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
     CGImageRelease(imageRef);
     
     return croppedImage;
-
+    
 }
 
 - (UIImage *)getThumbnailForImage:(UIImage *)image
@@ -1453,10 +1464,10 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
     dispatch_async(self.processingQueue, ^{
         UIImage *thumnbnail = [self getThumbnailForImage:image];
         double frameTimeMillisecs = CMTimeGetSeconds(presentationTimeStamp) * 1000;
-    
-        NSArray * objects = @[image, [self encodeToBase64String:thumnbnail], [NSNumber numberWithDouble:frameTimeMillisecs]];
+        
+        NSArray * objects = @[UIImageJPEGRepresentation(image, 0.6), [self encodeToBase64String:thumnbnail], [NSNumber numberWithDouble:frameTimeMillisecs]];
         NSArray * keys =  @[@"frameData", @"thumbnail", @"milliseconds"];
-
+        
         
         NSDictionary *frameInfoDict = [NSDictionary dictionaryWithObjects:objects forKeys:keys];
         
@@ -1510,12 +1521,12 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
     
     NSUInteger baseTimestamp = [[sortedArray firstObject][@"milliseconds"] unsignedIntegerValue];
     
-    UIImage *baseImage = [sortedArray firstObject][@"frameData"];
+    UIImage *baseImage = [UIImage imageWithData:[sortedArray firstObject][@"frameData"]];
     
-    AVAssetWriter *videoWriter = [[AVAssetWriter alloc] initWithURL:
-                                  [NSURL fileURLWithPath: targetPath]
-                                                           fileType:AVFileTypeMPEG4
-                                                              error:&error];
+    self.videoWriter = [[AVAssetWriter alloc] initWithURL:
+                        [NSURL fileURLWithPath: targetPath]
+                                                 fileType:AVFileTypeMPEG4
+                                                    error:&error];
     
     NSDictionary *videoSettings = [NSDictionary dictionaryWithObjectsAndKeys:
                                    AVVideoCodecH264, AVVideoCodecKey,
@@ -1524,51 +1535,53 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
                                    nil];
     
     
-    AVAssetWriterInput* videoWriterInput = [AVAssetWriterInput
-                                            assetWriterInputWithMediaType:AVMediaTypeVideo
-                                            outputSettings:videoSettings];
+    self.videoWriterInput = [AVAssetWriterInput
+                             assetWriterInputWithMediaType:AVMediaTypeVideo
+                             outputSettings:videoSettings];
     
     NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
                                 [NSNumber numberWithUnsignedInt:kCVPixelFormatType_32ARGB], (NSString*)kCVPixelBufferPixelFormatTypeKey,
                                 [NSNumber numberWithBool:YES], (NSString *)kCVPixelBufferCGImageCompatibilityKey,
                                 [NSNumber numberWithBool:YES], (NSString *)kCVPixelBufferCGBitmapContextCompatibilityKey,
                                 nil];
-    AVAssetWriterInputPixelBufferAdaptor *writerAdaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:videoWriterInput sourcePixelBufferAttributes:attributes];
+    AVAssetWriterInputPixelBufferAdaptor *writerAdaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:self.videoWriterInput sourcePixelBufferAttributes:attributes];
     
-    videoWriterInput.expectsMediaDataInRealTime = YES;
-    [videoWriter addInput:videoWriterInput];
+    self.videoWriterInput.expectsMediaDataInRealTime = YES;
+    [self.videoWriter addInput:self.videoWriterInput];
     //Start a session:
-    [videoWriter startWriting];
-    [videoWriter startSessionAtSourceTime:kCMTimeZero];
-    
+    [self.videoWriter startWriting];
+    [self.videoWriter startSessionAtSourceTime:kCMTimeZero];
     
     //convert uiimage to CGImage.
+    __weak RNCamera *weakSelf = self;
     
-    [videoWriterInput requestMediaDataWhenReadyOnQueue:self.videoProcessingQueue usingBlock:^{
+    [self.videoWriterInput requestMediaDataWhenReadyOnQueue:self.videoProcessingQueue usingBlock:^{
         for (int i = 0; i < sortedArray.count; ++i)
         {
-            while (![videoWriterInput isReadyForMoreMediaData]) {
-                [NSThread sleepForTimeInterval:0.01];
-                // can check for attempts not to create an infinite loop
+            @autoreleasepool {
+                while (![weakSelf.videoWriterInput isReadyForMoreMediaData]) {
+                    [NSThread sleepForTimeInterval:0.01];
+                    // can check for attempts not to create an infinite loop
+                }
+                
+                UIImage *uIImage = [UIImage imageWithData:sortedArray[i][@"frameData"]];
+                CVPixelBufferRef buffer = NULL;
+                CVReturn err = PixelBufferCreateFromImage(uIImage.CGImage, &buffer);
+                if (err) {
+                    // handle error
+                }
+                
+                // frame duration is duration of single image in seconds
+                CMTime presentationTime = CMTimeMake([sortedArray[i][@"milliseconds"]  unsignedIntegerValue] - baseTimestamp, 1000);
+                
+                BOOL success = [writerAdaptor appendPixelBuffer:buffer withPresentationTime:presentationTime];
+                CVPixelBufferRelease(buffer);
             }
-            
-            UIImage *uIImage = sortedArray[i][@"frameData"];
-            CVPixelBufferRef buffer = NULL;
-            CVReturn err = PixelBufferCreateFromImage(uIImage.CGImage, &buffer);
-            if (err) {
-                // handle error
-            }
-            
-            // frame duration is duration of single image in seconds
-            CMTime presentationTime = CMTimeMake([sortedArray[i][@"milliseconds"]  unsignedIntegerValue] - baseTimestamp, 1000);
-            
-            BOOL success = [writerAdaptor appendPixelBuffer:buffer withPresentationTime:presentationTime];
-            CVPixelBufferRelease(buffer);
         }
         
-        [videoWriterInput markAsFinished];
-        [videoWriter finishWritingWithCompletionHandler:^{
-            completionBlock ? completionBlock(targetPath, videoWriter.error ): nil;
+        [weakSelf.videoWriterInput markAsFinished];
+        [weakSelf.videoWriter finishWritingWithCompletionHandler:^{
+            completionBlock ? completionBlock(targetPath, weakSelf.videoWriter.error ): nil;
         }];
     }];
     
