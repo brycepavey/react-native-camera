@@ -786,6 +786,36 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
           }];
 }
 
+-(void)generateProvisionalVideoWithOptions:(NSDictionary *)options resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+    __weak RNCamera *weakSelf = self;
+    NSNumber *startTime = options[@"startTimestamp"];
+    NSNumber *endTime = options[@"endTimestamp"];
+    
+    if (!startTime || !endTime) {
+        //        reject("Incorrect Arguments: {startTimestamp , endTimestamp} must be included");
+        reject(@"E_VIDEO_FILE_OUTPUT_FAILED", @"Incorrect Arguments: {startTimestamp , endTimestamp} must be included", [NSError new]);
+        return;
+    }
+    
+    [self createVideoWithName:[[NSUUID UUID] UUIDString] FromTimestamp:[startTime doubleValue]
+                  toTimestamp:[endTime doubleValue]
+          withCompletionBlock:^(NSString *filePath, NSError *error){
+              if (error) {
+                  NSLog(@"%@", error.localizedDescription);
+                  reject(@"E_VIDEO_FILE_OUTPUT_FAILED", @"File generation failed with error", error);
+                  //            reject([NSString stringWithFormat:@"%@", error.localizedDescription])
+                  return;
+              }
+              
+              NSDictionary *eventRecordedFrames = @{
+                                                    @"type" : @"OutputFile",
+                                                    @"filepath" : filePath
+                                                    };
+              resolve(eventRecordedFrames);
+          }];
+}
+
 
 - (void)resumePreview
 {

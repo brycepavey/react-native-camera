@@ -76,9 +76,8 @@ type RecordingOptions = {
 
 type OutputOptions = {
   startTimestamp?: number,
-  endTimestamp?: number
+  endTimestamp?: number,
 };
-
 
 type EventCallbackArgumentsType = {
   nativeEvent: Object,
@@ -328,9 +327,12 @@ export default class Camera extends React.Component<PropsType, StateType> {
     return await CameraManager.getAvailablePictureSizes(this.props.ratio, this._cameraHandle);
   };
 
-  async outputVideo(options?: OutputOptions) 
-  {
-     return await CameraManager.outputVideo(options, this._cameraHandle)
+  async outputVideo(options?: OutputOptions) {
+    return await CameraManager.outputVideo(options, this._cameraHandle);
+  }
+
+  async outputProvisionalVideo(options?: OutputOptions) {
+    return await CameraManager.outputProvisionalVideo(options, this._cameraHandle);
   }
 
   async recordAsync(options?: RecordingOptions) {
@@ -350,10 +352,10 @@ export default class Camera extends React.Component<PropsType, StateType> {
       }
     }
 
-    const { captureAudio } = this.props
+    const { captureAudio } = this.props;
 
     if (!captureAudio) {
-      options.mute = true
+      options.mute = true;
     }
     return await CameraManager.record(options, this._cameraHandle);
   }
@@ -369,8 +371,6 @@ export default class Camera extends React.Component<PropsType, StateType> {
   isRecording() {
     return CameraManager.isRecording(this._cameraHandle);
   }
-
- 
 
   resumePreview() {
     CameraManager.resumePreview(this._cameraHandle);
@@ -462,8 +462,8 @@ export default class Camera extends React.Component<PropsType, StateType> {
   _onRecordingStarted = ({ nativeEvent }: EventCallbackArgumentsType) => {
     if (this.props.onRecordingStarted) {
       this.props.onRecordingStarted(nativeEvent);
-    } 
-  }
+    }
+  };
 
   render() {
     const { style, ...nativeProps } = this._convertNativeProps(this.props);
