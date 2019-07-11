@@ -25,6 +25,7 @@ import android.os.Build;
 import android.support.v4.util.SparseArrayCompat;
 import android.view.SurfaceHolder;
 
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
 
 import java.io.File;
@@ -348,6 +349,18 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
         if (setZoomInternal(zoom)) {
             mCamera.setParameters(mCameraParameters);
         }
+    }
+
+    @Override
+    void generateVideo(ReadableMap options, Promise promise)
+    {
+
+    }
+
+    @Override
+    void generateProvisionalVideo(ReadableMap options, Promise promise)
+    {
+
     }
 
     @Override

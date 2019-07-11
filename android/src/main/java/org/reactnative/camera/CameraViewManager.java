@@ -25,6 +25,8 @@ public class CameraViewManager extends ViewGroupManager<RNCameraView> {
     EVENT_ON_TEXT_RECOGNIZED("onTextRecognized"),
     EVENT_ON_PICTURE_TAKEN("onPictureTaken"),
     EVENT_ON_PICTURE_SAVED("onPictureSaved"),
+    EVENT_ON_FETCHING_STREAM("onFetchingStream"),
+    EVENT_ON_RECEIVE_STREAM("onReceiveStream"),
     EVENT_RECORDING_STARTED("onRecordingStarted");
 
     private final String mName;

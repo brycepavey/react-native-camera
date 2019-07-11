@@ -20,6 +20,7 @@ import android.media.CamcorderProfile;
 import android.view.View;
 import android.graphics.SurfaceTexture;
 
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
 
 import java.util.Set;
@@ -82,6 +83,10 @@ abstract class CameraViewImpl {
                             boolean recordAudio, CamcorderProfile profile, int orientation);
 
     abstract void stopRecording();
+
+    abstract void generateVideo(ReadableMap options, Promise promise);
+
+    abstract void generateProvisionalVideo(ReadableMap options, Promise promise);
 
     abstract void setDisplayOrientation(int displayOrientation);
 

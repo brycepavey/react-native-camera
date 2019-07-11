@@ -250,6 +250,11 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
     RNCameraViewHelper.emitPictureSavedEvent(this, response);
   }
 
+  @Override
+  public void onReceiveStream(WritableMap response) {
+    RNCameraViewHelper.emitPictureSavedEvent(this, response);
+  }
+
   public void record(ReadableMap options, final Promise promise, File cacheDirectory) {
     try {
       String path = options.hasKey("path") ? options.getString("path") : RNFileUtils.getOutputFilePath(cacheDirectory, ".mp4");
@@ -495,6 +500,8 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
       stop();
     }
   }
+
+
 
   @Override
   public void onHostDestroy() {

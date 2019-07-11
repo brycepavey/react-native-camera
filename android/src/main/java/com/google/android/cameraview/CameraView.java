@@ -33,7 +33,11 @@ import android.view.View;
 import android.widget.FrameLayout;
 import android.graphics.SurfaceTexture;
 
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.WritableMap;
+
+import org.reactnative.camera.RNCameraViewHelper;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -108,13 +112,13 @@ public class CameraView extends FrameLayout {
         // Internal setup
         final PreviewImpl preview = createPreviewImpl(context);
         mCallbacks = new CallbackBridge();
-        if (fallbackToOldApi || Build.VERSION.SDK_INT < 21) {
-            mImpl = new Camera1(mCallbacks, preview);
-        } else if (Build.VERSION.SDK_INT < 23) {
-            mImpl = new Camera2(mCallbacks, preview, context);
-        } else {
+        // if (fallbackToOldApi || Build.VERSION.SDK_INT < 21) {
+        //     mImpl = new Camera1(mCallbacks, preview);
+        // } else if (Build.VERSION.SDK_INT < 23) {
+        //     mImpl = new Camera2(mCallbacks, preview, context);
+        // } else {
             mImpl = new Camera2Api23(mCallbacks, preview, context);
-        }
+        // }
 
         // Display orientation detector
         mDisplayOrientationDetector = new DisplayOrientationDetector(context) {
@@ -538,6 +542,23 @@ public class CameraView extends FrameLayout {
 
     public Size getPreviewSize() {
         return mImpl.getPreviewSize();
+    }
+
+
+    public void generateVideo(ReadableMap options, Promise promise)
+    {
+        mImpl.generateVideo(options, promise);
+    }
+  
+    public void generateProvisionalVideo(ReadableMap options, Promise promise)
+    {
+        mImpl.generateProvisionalVideo(options, promise);
+    }
+
+    public void onPictureSaved(WritableMap response) {
+    }
+
+    public void onReceiveStream(WritableMap response) {
     }
 
     private class CallbackBridge implements CameraViewImpl.Callback {

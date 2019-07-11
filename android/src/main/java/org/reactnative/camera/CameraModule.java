@@ -226,6 +226,8 @@ public class CameraModule extends ReactContextBaseJavaModule {
             }
         });
     }
+
+    
     
     @ReactMethod
     public void resumePreview(final int viewTag) {
@@ -315,6 +317,43 @@ public class CameraModule extends ReactContextBaseJavaModule {
           }
       });
   }
+
+  @ReactMethod
+  public void outputVideo(final ReadableMap options, final int viewTag, final Promise promise) {
+      final ReactApplicationContext context = getReactApplicationContext();
+      UIManagerModule uiManager = context.getNativeModule(UIManagerModule.class);
+      uiManager.addUIBlock(new UIBlock() {
+          @Override
+          public void execute(NativeViewHierarchyManager nativeViewHierarchyManager) {
+              final RNCameraView cameraView;
+              try {
+                  cameraView = (RNCameraView) nativeViewHierarchyManager.resolveView(viewTag);
+                  cameraView.generateVideo(options, promise);
+              } catch (Exception e) {
+                  e.printStackTrace();
+              }
+          }
+      });
+  }
+
+  @ReactMethod
+  public void outputProvisionalVideo(final ReadableMap options, final int viewTag, final Promise promise) {
+      final ReactApplicationContext context = getReactApplicationContext();
+      UIManagerModule uiManager = context.getNativeModule(UIManagerModule.class);
+      uiManager.addUIBlock(new UIBlock() {
+          @Override
+          public void execute(NativeViewHierarchyManager nativeViewHierarchyManager) {
+              final RNCameraView cameraView;
+              try {
+                  cameraView = (RNCameraView) nativeViewHierarchyManager.resolveView(viewTag);
+                  cameraView.generateProvisionalVideo(options, promise);
+              } catch (Exception e) {
+                  e.printStackTrace();
+              }
+          }
+      });
+  }
+
 
   @ReactMethod
   public void getSupportedRatios(final int viewTag, final Promise promise) {

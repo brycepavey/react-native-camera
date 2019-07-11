@@ -41,6 +41,7 @@ import android.view.Surface;
 import android.os.Handler;
 import android.os.Looper;
 
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
 
 import java.io.File;
@@ -325,6 +326,18 @@ class Camera2 extends CameraViewImpl implements MediaRecorder.OnInfoListener, Me
             }
         }
     }
+
+    @Override
+    void generateVideo(ReadableMap options, Promise promise) {
+
+    }
+
+    @Override
+    void generateProvisionalVideo(ReadableMap options, Promise promise) {
+
+    }
+
+    
 
     @Override
     boolean isCameraOpened() {
