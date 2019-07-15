@@ -259,7 +259,7 @@ public class CameraView extends FrameLayout {
         boolean wasOpened = isCameraOpened();
         Parcelable state = onSaveInstanceState();
 
-        if (useCamera2) {
+//        if (useCamera2) {
             if (wasOpened) {
                 stop();
             }
@@ -268,16 +268,6 @@ public class CameraView extends FrameLayout {
             } else {
                 mImpl = new Camera2Api23(mCallbacks, mImpl.mPreview, mContext);
             }
-        } else {
-            if (mImpl instanceof Camera1) {
-                return;
-            }
-
-            if (wasOpened) {
-                stop();
-            }
-            mImpl = new Camera1(mCallbacks, mImpl.mPreview);
-        }
         start();
     }
 
