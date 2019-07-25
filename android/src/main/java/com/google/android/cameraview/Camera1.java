@@ -24,6 +24,7 @@ import android.media.MediaRecorder;
 import android.os.Build;
 import android.support.v4.util.SparseArrayCompat;
 import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
@@ -111,7 +112,7 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
 
     private SurfaceTexture mPreviewTexture;
 
-    Camera1(Callback callback, PreviewImpl preview) {
+    Camera1(Callback callback, SurfaceViewPreview preview) {
         super(callback, preview);
         preview.setCallback(new PreviewImpl.Callback() {
             @Override

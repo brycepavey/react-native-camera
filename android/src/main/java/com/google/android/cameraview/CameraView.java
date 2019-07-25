@@ -29,6 +29,7 @@ import android.support.v4.os.ParcelableCompat;
 import android.support.v4.os.ParcelableCompatCreatorCallbacks;
 import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
+import android.view.SurfaceView;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.graphics.SurfaceTexture;
@@ -42,6 +43,7 @@ import org.reactnative.camera.RNCameraViewHelper;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.SortedSet;
 
@@ -110,7 +112,7 @@ public class CameraView extends FrameLayout {
         mContext = context;
 
         // Internal setup
-        final PreviewImpl preview = createPreviewImpl(context);
+        final SurfaceViewPreview preview = createPreviewImpl(context);
         mCallbacks = new CallbackBridge();
         // if (fallbackToOldApi || Build.VERSION.SDK_INT < 21) {
         //     mImpl = new Camera1(mCallbacks, preview);
@@ -131,13 +133,13 @@ public class CameraView extends FrameLayout {
     }
 
     @NonNull
-    private PreviewImpl createPreviewImpl(Context context) {
-        PreviewImpl preview;
-        if (Build.VERSION.SDK_INT < 14) {
+    private SurfaceViewPreview createPreviewImpl(Context context) {
+        SurfaceViewPreview preview;
+//        if (Build.VERSION.SDK_INT < 14) {
             preview = new SurfaceViewPreview(context, this);
-        } else {
-            preview = new TextureViewPreview(context, this);
-        }
+//        } else {
+//            preview = new TextureViewPreview(context, this);
+//        }
         return preview;
     }
 
@@ -256,19 +258,19 @@ public class CameraView extends FrameLayout {
             return;
         }
 
-        boolean wasOpened = isCameraOpened();
-        Parcelable state = onSaveInstanceState();
-
-//        if (useCamera2) {
-            if (wasOpened) {
-                stop();
-            }
-            if (Build.VERSION.SDK_INT < 23) {
-                mImpl = new Camera2(mCallbacks, mImpl.mPreview, mContext);
-            } else {
-                mImpl = new Camera2Api23(mCallbacks, mImpl.mPreview, mContext);
-            }
-        start();
+//        boolean wasOpened = isCameraOpened();
+//        Parcelable state = onSaveInstanceState();
+//
+////        if (useCamera2) {
+//            if (wasOpened) {
+//                stop();
+//            }
+//            if (Build.VERSION.SDK_INT < 23) {
+//                mImpl = new Camera2(mCallbacks, mImpl.mPreview, mContext);
+//            } else {
+//                mImpl = new Camera2Api23(mCallbacks, mImpl.mPreview, mContext);
+//            }
+//        start();
     }
 
     /**
@@ -548,6 +550,10 @@ public class CameraView extends FrameLayout {
     public void onPictureSaved(WritableMap response) {
     }
 
+    public void onFetchingStream() {
+
+    }
+
     public void onReceiveStream(WritableMap response) {
     }
 
@@ -604,6 +610,21 @@ public class CameraView extends FrameLayout {
         public void onFramePreview(byte[] data, int width, int height, int orientation) {
             for (Callback callback : mCallbacks) {
                 callback.onFramePreview(CameraView.this, data, width, height, orientation);
+            }
+        }
+
+        @Override
+        public void onReceiveStream(WritableMap frames) {
+            for (Callback callback : mCallbacks) {
+                callback.onReceiveStream(frames);
+            }
+        }
+
+        @Override
+        public void onFetchingStream()
+        {
+            for (Callback callback : mCallbacks) {
+                callback.onFetchingStream();
             }
         }
 
@@ -734,6 +755,10 @@ public class CameraView extends FrameLayout {
         }
 
         public void onMountError(CameraView cameraView) {}
+
+        public void onFetchingStream() {}
+
+        public void onReceiveStream(WritableMap frames) {}
     }
 
 }

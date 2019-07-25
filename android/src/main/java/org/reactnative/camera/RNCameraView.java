@@ -89,6 +89,8 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
         RNCameraViewHelper.emitMountErrorEvent(cameraView, "Camera view threw an error - component could not be rendered.");
       }
 
+
+
       @Override
       public void onPictureTaken(CameraView cameraView, final byte[] data, int deviceOrientation) {
         Promise promise = mPictureTakenPromises.poll();
@@ -122,6 +124,16 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
           mVideoRecordedPromise = null;
         }
       }
+
+      @Override
+      public void onReceiveStream(WritableMap frames) {
+        RNCameraView.this.onReceiveStream(frames);
+      }
+
+        @Override
+        public void onFetchingStream() {
+            RNCameraView.this.onFetchingStream();
+        }
 
       @Override
       public void onFramePreview(CameraView cameraView, byte[] data, int width, int height, int rotation) {
@@ -252,8 +264,15 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
 
   @Override
   public void onReceiveStream(WritableMap response) {
-    RNCameraViewHelper.emitPictureSavedEvent(this, response);
+    RNCameraViewHelper.emitOnReceivedStreamEvent(this, response);
   }
+
+    @Override
+    public void onFetchingStream() {
+        RNCameraViewHelper.emitOnFetchingStreamEvent(this);
+    }
+
+
 
   public void record(ReadableMap options, final Promise promise, File cacheDirectory) {
     try {

@@ -198,6 +198,18 @@ public class RNCameraViewHelper {
     reactContext.getNativeModule(UIManagerModule.class).getEventDispatcher().dispatchEvent(event);
   }
 
+  public static void emitOnReceivedStreamEvent(ViewGroup view, WritableMap response) {
+    StreamReceivedEvent event = StreamReceivedEvent.obtain(view.getId(), response);
+    ReactContext reactContext = (ReactContext) view.getContext();
+    reactContext.getNativeModule(UIManagerModule.class).getEventDispatcher().dispatchEvent(event);
+  }
+
+  public static void emitOnFetchingStreamEvent(ViewGroup view) {
+    FetchingStreamEvent event = FetchingStreamEvent.obtain(view.getId());
+    ReactContext reactContext = (ReactContext) view.getContext();
+    reactContext.getNativeModule(UIManagerModule.class).getEventDispatcher().dispatchEvent(event);
+  }
+
   // Face detection events
 
   public static void emitFacesDetectedEvent(

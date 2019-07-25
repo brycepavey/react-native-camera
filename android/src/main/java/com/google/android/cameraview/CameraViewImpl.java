@@ -17,12 +17,15 @@
 package com.google.android.cameraview;
 
 import android.media.CamcorderProfile;
+import android.view.Surface;
 import android.view.View;
 import android.graphics.SurfaceTexture;
 
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.WritableMap;
 
+import java.util.HashMap;
 import java.util.Set;
 import java.util.SortedSet;
 
@@ -30,9 +33,9 @@ abstract class CameraViewImpl {
 
     protected final Callback mCallback;
 
-    protected final PreviewImpl mPreview;
+    protected final SurfaceViewPreview mPreview;
 
-    CameraViewImpl(Callback callback, PreviewImpl preview) {
+    CameraViewImpl(Callback callback, SurfaceViewPreview preview) {
         mCallback = callback;
         mPreview = preview;
     }
@@ -127,6 +130,10 @@ abstract class CameraViewImpl {
         void onVideoRecorded(String path, int videoOrientation, int deviceOrientation);
 
         void onFramePreview(byte[] data, int width, int height, int orientation);
+
+        void onFetchingStream();
+
+        void onReceiveStream(WritableMap frames);
 
         void onMountError();
     }
