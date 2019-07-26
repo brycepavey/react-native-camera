@@ -134,8 +134,8 @@ class Camera2 extends CameraViewImpl {
     private CameraBufferArray<HashMap<String, Object>> mFramesArray = new CameraBufferArray<>(1000);
 
 
-    private static final int VIDEO_WIDTH = 1280;  // dimensions for 720p video
-    private static final int VIDEO_HEIGHT = 720;
+    private static final int VIDEO_WIDTH = 720;  // dimensions for 720p video
+    private static final int VIDEO_HEIGHT = 1280;
     private static final int DESIRED_PREVIEW_FPS = 30;
 
     private EglCore mEglCore;
@@ -155,6 +155,7 @@ class Camera2 extends CameraViewImpl {
     private boolean mFileSaveInProgress;
 
     private MainHandler mHandler;
+    private SurfaceTexture mPreviewTexture;
     private float mSecondsOfVideo;
 
 //    private final CameraDevice.StateCallback mCameraDeviceCallback
@@ -586,11 +587,17 @@ class Camera2 extends CameraViewImpl {
 
     private void startPreview() {
         if (mCamera != null) {
-            Log.d(TAG, "starting camera preview");
+//            Log.d(TAG, "starting camera preview");
+//            try {
+//
+//                mCamera.setPreviewTexture(mCameraTexture);
+//            } catch (IOException ioe) {
+//                throw new RuntimeException(ioe);
+//            }
             try {
-                mCamera.setPreviewTexture(mCameraTexture);
-            } catch (IOException ioe) {
-                throw new RuntimeException(ioe);
+                mCamera.setPreviewDisplay(mPreview.getSurfaceHolder());
+            } catch (IOException e) {
+                e.printStackTrace();
             }
             mCamera.startPreview();
         }
@@ -1325,11 +1332,11 @@ class Camera2 extends CameraViewImpl {
                 mPreviewSizes.add(new Size(width, height));
             }
         }
-        mPictureSizes.clear();
-        collectPictureSizes(mPictureSizes, map);
-        if (mPictureSize == null) {
-            mPictureSize = mPictureSizes.sizes(mAspectRatio).last();
-        }
+//        mPictureSizes.clear();
+//        collectPictureSizes(mPictureSizes, map);
+//        if (mPictureSize == null) {
+//            mPictureSize = mPictureSizes.sizes(mAspectRatio).last();
+//        }
         for (AspectRatio ratio : mPreviewSizes.ratios()) {
             if (!mPictureSizes.ratios().contains(ratio)) {
                 mPreviewSizes.remove(ratio);
@@ -1490,18 +1497,39 @@ class Camera2 extends CameraViewImpl {
         }
 
         // it may be called from another thread, so make sure we're in main looper
-        Handler handler = new Handler(Looper.getMainLooper());
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-//                if (mCaptureSession != null) {
-//                    mCaptureSession.close();
-//                    mCaptureSession = null;
-//                }
-//                startCaptureSession();
+//        Handler handler = new Handler(Looper.getMainLooper());
+//        handler.post(new Runnable() {
+//            @Override
+//            public void run() {
+////                if (mCaptureSession != null) {
+////                    mCaptureSession.close();
+////                    mCaptureSession = null;
+////                }
+////                startCaptureSession();
+//
+//            }
+//        });
 
+        try {
+            if (mCamera == null) {
+                mPreviewTexture = surfaceTexture;
+                return;
             }
-        });
+
+            mCamera.stopPreview();
+//            mIsPreviewActive = false;
+
+            if (surfaceTexture == null) {
+                mCamera.setPreviewTexture((SurfaceTexture) mPreview.getSurfaceTexture());
+            } else {
+                mCamera.setPreviewTexture(surfaceTexture);
+            }
+
+            mPreviewTexture = surfaceTexture;
+            startPreview();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override

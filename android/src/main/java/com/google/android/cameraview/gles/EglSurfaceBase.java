@@ -175,7 +175,7 @@ public class EglSurfaceBase {
         ByteArrayOutputStream outStream = new ByteArrayOutputStream();
         BufferedOutputStream bos = null;
 
-        String base64Data = null;
+//        String base64Data = null;
         String base64DataThumbnail = null;
         HashMap<String, String> dictionary = null;
         try {
@@ -183,13 +183,13 @@ public class EglSurfaceBase {
             ByteArrayOutputStream bat = new ByteArrayOutputStream();
             Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
             bmp.copyPixelsFromBuffer(buf);
-            boolean _result = bmp.compress(Bitmap.CompressFormat.JPEG, 90, ba);
+//            boolean _result = bmp.compress(Bitmap.CompressFormat.JPEG, 90, ba);
             Bitmap thumbnail = Bitmap.createScaledBitmap(bmp, 200, 200, false);
             boolean _resultT = thumbnail.compress(Bitmap.CompressFormat.JPEG, 90, bat);
-            base64Data = Base64.encodeToString(ba.toByteArray(), Base64.NO_WRAP);
+//            base64Data = Base64.encodeToString(ba.toByteArray(), Base64.NO_WRAP);
             base64DataThumbnail = Base64.encodeToString(bat.toByteArray(), Base64.NO_WRAP);
             dictionary = new HashMap<>();
-            dictionary.put("frameData", base64Data);
+//            dictionary.put("frameData", base64Data);
             dictionary.put("thumbnail", base64DataThumbnail);
             bmp.recycle();
         } catch (Exception e) {
