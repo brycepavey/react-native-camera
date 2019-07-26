@@ -108,7 +108,7 @@ import static com.xuggle.ferry.IBuffer.make;
 
 @SuppressWarnings("MissingPermission")
 @TargetApi(21)
-class Camera2 extends CameraViewImpl {
+class CameraXX extends CameraViewImpl {
 
     private static final String TAG = "Camera2";
 
@@ -272,15 +272,15 @@ class Camera2 extends CameraViewImpl {
 
         };
 
-        private WeakReference<Camera2> mWeakActivity;
+        private WeakReference<CameraXX> mWeakActivity;
 
-        public MainHandler(Camera2 activity) {
-            mWeakActivity = new WeakReference<Camera2>(activity);
+        public MainHandler(CameraXX activity) {
+            mWeakActivity = new WeakReference<CameraXX>(activity);
         }
 
         @Override
         public void handleMessage(Message msg) {
-            Camera2 activity = mWeakActivity.get();
+            CameraXX activity = mWeakActivity.get();
             if (activity == null) {
                 Log.d(TAG, "Got message for dead activity");
                 return;
@@ -707,7 +707,7 @@ class Camera2 extends CameraViewImpl {
         }
     }
 
-    Camera2(Callback callback, SurfaceViewPreview preview, Context context) {
+    CameraXX(Callback callback, SurfaceViewPreview preview, Context context) {
         super(callback, preview);
 
         mCurrentContext = context;

@@ -22,6 +22,7 @@ import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
+import android.net.Uri;
 import android.opengl.GLES20;
 import android.os.Build;
 import android.os.Handler;
@@ -34,12 +35,17 @@ import android.view.View;
 
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.WritableNativeMap;
 import com.google.android.cameraview.gles.CameraUtils;
 import com.google.android.cameraview.gles.CircularEncoder;
 import com.google.android.cameraview.gles.EglCore;
 import com.google.android.cameraview.gles.FullFrameRect;
 import com.google.android.cameraview.gles.Texture2dProgram;
 import com.google.android.cameraview.gles.WindowSurface;
+
+import org.json.JSONArray;
+import org.json.JSONException;
 
 import java.io.File;
 import java.io.IOException;
@@ -333,6 +339,23 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
             throw new RuntimeException("WEIRD: got fileSaveCmplete when not in progress");
         }
         mFileSaveInProgress = false;
+
+        String targetFile = Uri.fromFile(mOutputFile).toString();
+
+        List<HashMap<String, Object>> frames = mFramesArray.allItems();
+
+        JSONArray newArray = new JSONArray(frames);
+
+        final WritableMap response = new WritableNativeMap();
+        response.putString("type", "RecordedFrames");
+        response.putString("filepath", targetFile);
+        try {
+            response.putArray("frames", NativeMapsUtility.convertJsonToArray(newArray));
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+        mCallback.onReceiveStream(response);
     }
 
     private void updateBufferStatus(long durationUsec) {
@@ -932,10 +955,15 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
     @Override
     void stopRecording() {
         if (mIsRecording) {
-            stopMediaRecorder();
-            if (mCamera != null) {
-                mCamera.lock();
-            }
+//            stopMediaRecorder();
+//            if (mCamera != null) {
+//                mCamera.lock();
+//            }
+
+            mCallback.onFetchingStream();
+            mFileSaveInProgress = true;
+            mCircEncoder.saveVideo(mOutputFile);
+
         }
     }
 
