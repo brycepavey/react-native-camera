@@ -17,20 +17,34 @@
 package com.google.android.cameraview;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
+import android.opengl.GLES20;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Message;
 import android.support.v4.util.SparseArrayCompat;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
 
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
+import com.google.android.cameraview.gles.CameraUtils;
+import com.google.android.cameraview.gles.CircularEncoder;
+import com.google.android.cameraview.gles.EglCore;
+import com.google.android.cameraview.gles.FullFrameRect;
+import com.google.android.cameraview.gles.Texture2dProgram;
+import com.google.android.cameraview.gles.WindowSurface;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.ref.WeakReference;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
@@ -42,6 +56,7 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
                                                 MediaRecorder.OnErrorListener, Camera.PreviewCallback {
 
     private static final int INVALID_CAMERA_ID = -1;
+    private static final String TAG = "Camera1";
 
     private static final SparseArrayCompat<String> FLASH_MODES = new SparseArrayCompat<>();
 
@@ -62,6 +77,376 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
       WB_MODES.put(Constants.WB_SHADOW, Camera.Parameters.WHITE_BALANCE_SHADE);
       WB_MODES.put(Constants.WB_FLUORESCENT, Camera.Parameters.WHITE_BALANCE_FLUORESCENT);
       WB_MODES.put(Constants.WB_INCANDESCENT, Camera.Parameters.WHITE_BALANCE_INCANDESCENT);
+    }
+
+
+    private CameraBufferArray<HashMap<String, Object>> mFramesArray = new CameraBufferArray<>(1000);
+    private static final int VIDEO_WIDTH = 720;  // dimensions for 720p video
+    private static final int VIDEO_HEIGHT = 1280;
+    private static final int DESIRED_PREVIEW_FPS = 30;
+
+    private EglCore mEglCore;
+    private WindowSurface mDisplaySurface;
+    private SurfaceTexture mCameraTexture;  // receives the output from the camera preview
+    private FullFrameRect mFullFrameBlit;
+    private final float[] mTmpMatrix = new float[16];
+    private int mTextureId;
+    private int mFrameNum;
+
+//    private Camera mCamera;
+    private int mCameraPreviewThousandFps;
+
+    private File mOutputFile;
+    private CircularEncoder mCircEncoder;
+    private WindowSurface mEncoderSurface;
+    private boolean mFileSaveInProgress;
+
+    private Camera1.MainHandler mHandler;
+//    private SurfaceTexture mPreviewTexture;
+    private float mSecondsOfVideo;
+
+//    private final CameraDevice.StateCallback mCameraDeviceCallback
+//            = new CameraDevice.StateCallback() {
+//
+//        @Override
+//        public void onOpened(@NonNull CameraDevice camera) {
+//            mCamera = camera;
+//            mCallback.onCameraOpened();
+//            startCaptureSession();
+//            requestingCamera = false;
+//        }
+//
+//        @Override
+//        public void onClosed(@NonNull CameraDevice camera) {
+//            mCallback.onCameraClosed();
+//            requestingCamera = false;
+//        }
+//
+//        @Override
+//        public void onDisconnected(@NonNull CameraDevice camera) {
+//            mCamera = null;
+//            requestingCamera = false;
+//        }
+//
+//        @Override
+//        public void onError(@NonNull CameraDevice camera, int error) {
+//            Log.e(TAG, "onError: " + camera.getId() + " (" + error + ")");
+//            mCamera = null;
+//            requestingCamera = false;
+//        }
+//
+//    };
+
+    private SurfaceTexture.OnFrameAvailableListener frameAvailableListener = new SurfaceTexture.OnFrameAvailableListener()
+    {
+        @Override   // SurfaceTexture.OnFrameAvailableListener; runs on arbitrary thread
+        public void onFrameAvailable(SurfaceTexture surfaceTexture) {
+            Log.d(TAG, "frame available");
+            surfaceTexture.getTimestamp();
+            mHandler.sendEmptyMessage(Camera1.MainHandler.MSG_FRAME_AVAILABLE);
+        }
+    };
+
+    private SurfaceHolder.Callback surfaceHolderCallback = new SurfaceHolder.Callback()
+    {
+        @Override   // SurfaceHolder.Callback
+        public void surfaceCreated(SurfaceHolder holder) {
+            Log.d(TAG, "surfaceCreated holder=" + holder);
+
+            // Set up everything that requires an EGL context.
+            //
+            // We had to wait until we had a surface because you can't make an EGL context current
+            // without one, and creating a temporary 1x1 pbuffer is a waste of time.
+            //
+            // The display surface that we use for the SurfaceView, and the encoder surface we
+            // use for video, use the same EGL context.
+            mEglCore = new EglCore(null, EglCore.FLAG_RECORDABLE);
+            mDisplaySurface = new WindowSurface(mEglCore, holder.getSurface(), false);
+            mDisplaySurface.makeCurrent();
+
+            mFullFrameBlit = new FullFrameRect(new Texture2dProgram(Texture2dProgram.ProgramType.TEXTURE_EXT));
+            mTextureId = mFullFrameBlit.createTextureObject();
+            mCameraTexture = new SurfaceTexture(mTextureId);
+            mCameraTexture.setOnFrameAvailableListener(frameAvailableListener);
+
+            startPreview();
+        }
+
+        @Override   // SurfaceHolder.Callback
+        public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+            Log.d(TAG, "surfaceChanged fmt=" + format + " size=" + width + "x" + height +
+                    " holder=" + holder);
+        }
+
+        @Override   // SurfaceHolder.Callback
+        public void surfaceDestroyed(SurfaceHolder holder) {
+            Log.d(TAG, "surfaceDestroyed holder=" + holder);
+        }
+    };
+
+    /**
+     * Custom message handler for main UI thread.
+     * <p>
+     * Used to handle camera preview "frame available" notifications, and implement the
+     * blinking "recording" text.  Receives callback messages from the encoder thread.
+     */
+    private static class MainHandler extends Handler {
+        public static final int MSG_BLINK_TEXT = 0;
+        public static final int MSG_FRAME_AVAILABLE = 1;
+        public static final int MSG_FILE_SAVE_COMPLETE = 2;
+        public static final int MSG_BUFFER_STATUS = 3;
+
+        public CircularEncoder.Callback circularEncoderCallback = new CircularEncoder.Callback(){
+
+            // CircularEncoder.Callback, called on encoder thread
+            @Override
+            public void fileSaveComplete(int status) {
+                sendMessage(obtainMessage(MSG_FILE_SAVE_COMPLETE, status, 0, null));
+            }
+
+            // CircularEncoder.Callback, called on encoder thread
+            @Override
+            public void bufferStatus(long totalTimeMsec) {
+                sendMessage(obtainMessage(MSG_BUFFER_STATUS,
+                        (int) (totalTimeMsec >> 32), (int) totalTimeMsec));
+            }
+
+            @Override
+            public void clearingBuffer(long timeCleared) {
+
+            }
+
+
+        };
+
+        private WeakReference<Camera1> mWeakActivity;
+
+        public MainHandler(Camera1 activity) {
+            mWeakActivity = new WeakReference<Camera1>(activity);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            Camera1 activity = mWeakActivity.get();
+            if (activity == null) {
+                Log.d(TAG, "Got message for dead activity");
+                return;
+            }
+
+            switch (msg.what) {
+                case MSG_BLINK_TEXT: {
+//                    TextView tv = (TextView) activity.findViewById(R.id.recording_text);
+//
+//                    // Attempting to make it blink by using setEnabled() doesn't work --
+//                    // it just changes the color.  We want to change the visibility.
+//                    int visibility = tv.getVisibility();
+//                    if (visibility == View.VISIBLE) {
+//                        visibility = View.INVISIBLE;
+//                    } else {
+//                        visibility = View.VISIBLE;
+//                    }
+//                    tv.setVisibility(visibility);
+//
+//                    int delay = (visibility == View.VISIBLE) ? 1000 : 200;
+                    sendEmptyMessageDelayed(MSG_BLINK_TEXT, 1000);
+                    break;
+                }
+                case MSG_FRAME_AVAILABLE: {
+                    activity.drawFrame();
+                    break;
+                }
+                case MSG_FILE_SAVE_COMPLETE: {
+                    activity.fileSaveComplete(msg.arg1);
+                    break;
+                }
+                case MSG_BUFFER_STATUS: {
+                    long duration = (((long) msg.arg1) << 32) |
+                            (((long) msg.arg2) & 0xffffffffL);
+                    activity.updateBufferStatus(duration);
+                    break;
+                }
+                default:
+                    throw new RuntimeException("Unknown message " + msg.what);
+            }
+        }
+    }
+
+    private void AddFrame(HashMap frameMap)
+    {
+        if (mFramesArray.size() >= 1000)
+        {
+            mFramesArray.removeFromStart(1001- mFramesArray.size());
+        }
+        mFramesArray.addLast(frameMap);
+    }
+
+
+    private void drawFrame() {
+        //Log.d(TAG, "drawFrame");
+        if (mEglCore == null) {
+            Log.d(TAG, "Skipping drawFrame after shutdown");
+            return;
+        }
+
+        // Latch the next frame from the camera.
+        mDisplaySurface.makeCurrent();
+        mCameraTexture.updateTexImage();
+        mCameraTexture.getTransformMatrix(mTmpMatrix);
+
+        // Fill the SurfaceView with it.
+        View sv = mPreview.getView();
+        int viewWidth = sv.getWidth();
+        int viewHeight = sv.getHeight();
+        GLES20.glViewport(0, 0, viewWidth, viewHeight);
+        mFullFrameBlit.drawFrame(mTextureId, mTmpMatrix);
+        mDisplaySurface.swapBuffers();
+
+        // Send it to the video encoder.
+        if (!mFileSaveInProgress) {
+            mEncoderSurface.makeCurrent();
+            GLES20.glViewport(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
+            mFullFrameBlit.drawFrame(mTextureId, mTmpMatrix);
+            mCircEncoder.frameAvailableSoon();
+
+            long timestamp = mCameraTexture.getTimestamp();
+            mEncoderSurface.setPresentationTime(timestamp);
+            mEncoderSurface.swapBuffers();
+            HashMap base64Image = mEncoderSurface.base64Image();
+            if (base64Image !=  null)
+            {
+                HashMap<String, Object> frameData = new HashMap<String, Object>();
+                frameData.putAll(base64Image);
+                frameData.put("milliseconds", timestamp/1000000);
+
+            }
+        }
+
+        mFrameNum++;
+    }
+
+    /**
+     * The file save has completed.  We can resume recording.
+     */
+    private void fileSaveComplete(int status) {
+        Log.d(TAG, "fileSaveComplete " + status);
+        if (!mFileSaveInProgress) {
+            throw new RuntimeException("WEIRD: got fileSaveCmplete when not in progress");
+        }
+        mFileSaveInProgress = false;
+    }
+
+    private void updateBufferStatus(long durationUsec) {
+        mSecondsOfVideo = durationUsec / 1000000.0f;
+    }
+
+    private void startPreview() {
+        if (mCamera != null) {
+//            Log.d(TAG, "starting camera preview");
+            try {
+
+                mCamera.setPreviewTexture(mCameraTexture);
+            } catch (IOException ioe) {
+                throw new RuntimeException(ioe);
+            }
+//            try {
+//                mCamera.setPreviewDisplay(mPreview.getSurfaceHolder());
+//            } catch (IOException e) {
+//                e.printStackTrace();
+//            }
+//            mCamera.startPreview();
+        }
+
+        // TODO: adjust bit rate based on frame rate?
+        // TODO: adjust video width/height based on what we're getting from the camera preview?
+        //       (can we guarantee that camera preview size is compatible with AVC video encoder?)
+        try {
+            mCircEncoder = new CircularEncoder(VIDEO_WIDTH, VIDEO_HEIGHT, 6000000,
+                    mCameraPreviewThousandFps / 1000, 60, mHandler.circularEncoderCallback);
+        } catch (IOException ioe) {
+            throw new RuntimeException(ioe);
+        }
+        mEncoderSurface = new WindowSurface(mEglCore, mCircEncoder.getInputSurface(), true);
+    }
+
+    /**
+     * Opens a camera, and attempts to establish preview mode at the specified width and height.
+     * <p>
+     * Sets mCameraPreviewFps to the expected frame rate (which might actually be variable).
+     */
+    private void openCamera(int desiredWidth, int desiredHeight, int desiredFps) {
+        if (mCamera != null) {
+            throw new RuntimeException("camera already initialized");
+        }
+
+        Camera.CameraInfo info = new Camera.CameraInfo();
+
+        // Try to find a front-facing camera (e.g. for videoconferencing).
+        int numCameras = Camera.getNumberOfCameras();
+        for (int i = 0; i < numCameras; i++) {
+            Camera.getCameraInfo(i, info);
+            if (info.facing == Camera.CameraInfo.CAMERA_FACING_BACK) {
+                mCamera = Camera.open(i);
+                break;
+            }
+        }
+        if (mCamera == null) {
+            Log.d(TAG, "No front-facing camera found; opening default");
+            mCamera = Camera.open();    // opens first back-facing camera
+        }
+        if (mCamera == null) {
+            throw new RuntimeException("Unable to open camera");
+        }
+
+        Camera.Parameters parms = mCamera.getParameters();
+
+        Camera.Parameters mCameraParameters = mCamera.getParameters();
+        // Supported preview sizes
+        mPreviewSizes.clear();
+        for (Camera.Size size : mCameraParameters.getSupportedPreviewSizes()) {
+            mPreviewSizes.add(new Size(size.width, size.height));
+        }
+        // Supported picture sizes;
+        mPictureSizes.clear();
+        for (Camera.Size size : mCameraParameters.getSupportedPictureSizes()) {
+            mPictureSizes.add(new Size(size.width, size.height));
+        }
+        // AspectRatio
+        if (mAspectRatio == null) {
+            mAspectRatio = Constants.DEFAULT_ASPECT_RATIO;
+        }
+
+
+        CameraUtils.choosePreviewSize(parms, desiredWidth, desiredHeight);
+
+        // Try to set the frame rate to a constant value.
+        mCameraPreviewThousandFps = CameraUtils.chooseFixedPreviewFps(parms, desiredFps * 1000);
+
+        // Give the camera a hint that we're recording video.  This can have a big
+        // impact on frame rate.
+        parms.setRecordingHint(true);
+
+        mCamera.setParameters(parms);
+
+        Camera.Size cameraPreviewSize = parms.getPreviewSize();
+        String previewFacts = cameraPreviewSize.width + "x" + cameraPreviewSize.height +
+                " @" + (mCameraPreviewThousandFps / 1000.0f) + "fps";
+        Log.i(TAG, "Camera config: " + previewFacts);
+
+//        AspectFrameLayout layout = (AspectFrameLayout) findViewById(R.id.continuousCapture_afl);
+//
+//        Display display = ((WindowManager)getSystemService(WINDOW_SERVICE)).getDefaultDisplay();
+//
+//        if(display.getRotation() == Surface.ROTATION_0) {
+        mCamera.setDisplayOrientation(90);
+//            layout.setAspectRatio((double) cameraPreviewSize.height / cameraPreviewSize.width);
+//        } else if(display.getRotation() == Surface.ROTATION_270) {
+//            layout.setAspectRatio((double) cameraPreviewSize.height / cameraPreviewSize.width);
+//            mCamera.setDisplayOrientation(180);
+//        } else {
+//            // Set the preview aspect ratio.
+//            layout.setAspectRatio((double) cameraPreviewSize.width / cameraPreviewSize.height);
+//        }
+
     }
 
     private int mCameraId;
@@ -112,13 +497,43 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
 
     private SurfaceTexture mPreviewTexture;
 
-    Camera1(Callback callback, SurfaceViewPreview preview) {
+    Camera1(Callback callback, SurfaceViewPreview preview, Context context) {
         super(callback, preview);
+
+        preview.getSurfaceHolder().addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+                mEglCore = new EglCore(null, EglCore.FLAG_RECORDABLE);
+                mDisplaySurface = new WindowSurface(mEglCore, mPreview.getSurfaceHolder().getSurface(), false);
+                mDisplaySurface.makeCurrent();
+
+                mFullFrameBlit = new FullFrameRect(new Texture2dProgram(Texture2dProgram.ProgramType.TEXTURE_EXT));
+                mTextureId = mFullFrameBlit.createTextureObject();
+                mCameraTexture = new SurfaceTexture(mTextureId);
+                mCameraTexture.setOnFrameAvailableListener(frameAvailableListener);
+            }
+
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+
+            }
+
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+
+            }
+        });
         preview.setCallback(new PreviewImpl.Callback() {
             @Override
             public void onSurfaceChanged() {
+
+
                 if (mCamera != null) {
+//                    setUpPreview();
+//                    startPreview();
+
                     setUpPreview();
+
                     mIsPreviewActive = false;
                     adjustCameraParameters();
                 }
@@ -129,6 +544,12 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
               stop();
             }
         });
+
+        mHandler = new Camera1.MainHandler(this);
+//        mHandler.sendEmptyMessageDelayed(MainHandler.MSG_BLINK_TEXT, 1500);
+        String filePath = context.getFilesDir().getPath().toString() + "/temp.mp4";
+        mOutputFile = new File(filePath);
+        mSecondsOfVideo = 0.0f;
     }
 
     @Override
@@ -171,33 +592,38 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
     // Suppresses Camera#setPreviewTexture
     @SuppressLint("NewApi")
     void setUpPreview() {
-        try {
-            if (mPreviewTexture != null) {
-                mCamera.setPreviewTexture(mPreviewTexture);
-            } else if (mPreview.getOutputClass() == SurfaceHolder.class) {
-                final boolean needsToStopPreview = mShowingPreview && Build.VERSION.SDK_INT < 14;
-                if (needsToStopPreview) {
-                    mCamera.stopPreview();
-                    mIsPreviewActive = false;
-                }
-                mCamera.setPreviewDisplay(mPreview.getSurfaceHolder());
-                if (needsToStopPreview) {
-                    startCameraPreview();
-                }
-            } else {
-                mCamera.setPreviewTexture((SurfaceTexture) mPreview.getSurfaceTexture());
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+//        try {
+//            if (mPreviewTexture != null) {
+//                mCamera.setPreviewTexture(mPreviewTexture);
+//            } else if (mPreview.getOutputClass() == SurfaceHolder.class) {
+//                final boolean needsToStopPreview = mShowingPreview && Build.VERSION.SDK_INT < 14;
+//                if (needsToStopPreview) {
+//                    mCamera.stopPreview();
+//                    mIsPreviewActive = false;
+//                }
+//                mCamera.setPreviewDisplay(mPreview.getSurfaceHolder());
+//                if (needsToStopPreview) {
+//                    startCameraPreview();
+//                }
+//            } else {
+//                mCamera.setPreviewTexture((SurfaceTexture) mPreview.getSurfaceTexture());
+//            }
+//        } catch (IOException e) {
+//            throw new RuntimeException(e);
+//        }
+
+
+
+
     }
 
     private void startCameraPreview() {
+        startPreview();
         mCamera.startPreview();
         mIsPreviewActive = true;
-        if (mIsScanning) {
-            mCamera.setPreviewCallback(this);
-        }
+//        if (mIsScanning) {
+//            mCamera.setPreviewCallback(this);
+//        }
     }
                                                     
     @Override
@@ -600,6 +1026,9 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
             for (Camera.Size size : mCameraParameters.getSupportedPreviewSizes()) {
                 mPreviewSizes.add(new Size(size.width, size.height));
             }
+
+            mCameraPreviewThousandFps = CameraUtils.chooseFixedPreviewFps(mCameraParameters, 30 * 1000);
+
             // Supported picture sizes;
             mPictureSizes.clear();
             for (Camera.Size size : mCameraParameters.getSupportedPictureSizes()) {

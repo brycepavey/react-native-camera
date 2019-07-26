@@ -115,11 +115,11 @@ public class CameraView extends FrameLayout {
         final SurfaceViewPreview preview = createPreviewImpl(context);
         mCallbacks = new CallbackBridge();
         // if (fallbackToOldApi || Build.VERSION.SDK_INT < 21) {
-//             mImpl = new Camera1(mCallbacks, preview);
+             mImpl = new Camera1(mCallbacks, preview, context);
         // } else if (Build.VERSION.SDK_INT < 23) {
         //     mImpl = new Camera2(mCallbacks, preview, context);
         // } else {
-            mImpl = new Camera2Api23(mCallbacks, preview, context);
+//            mImpl = new Camera2Api23(mCallbacks, preview, context);
         // }
 
         // Display orientation detector
@@ -285,7 +285,7 @@ public class CameraView extends FrameLayout {
             //store the state and restore this state after fall back to Camera1
             Parcelable state=onSaveInstanceState();
             // Camera2 uses legacy hardware layer; fall back to Camera1
-            mImpl = new Camera1(mCallbacks, createPreviewImpl(getContext()));
+            mImpl = new Camera1(mCallbacks, createPreviewImpl(getContext()), getContext());
             onRestoreInstanceState(state);
             mImpl.start();
         }
