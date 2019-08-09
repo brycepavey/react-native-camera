@@ -373,15 +373,17 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
             }
 //            try {
 //                mCamera.setPreviewDisplay(mPreview.getSurfaceHolder());
-//            } catch (IOException e) {
+//
+////            mCamera.startPreview();
+//        }
+//
+//        // TODO: adjust bit rate based on frame rate?     } catch (IOException e) {
 //                e.printStackTrace();
 //            }
-//            mCamera.startPreview();
+            // TODO: adjust video width/height based on what we're getting from the camera preview?
+            //       (can we guarantee that camera preview size is compatible with AVC video encoder?)
         }
 
-        // TODO: adjust bit rate based on frame rate?
-        // TODO: adjust video width/height based on what we're getting from the camera preview?
-        //       (can we guarantee that camera preview size is compatible with AVC video encoder?)
         try {
             mCircEncoder = new CircularEncoder(VIDEO_WIDTH, VIDEO_HEIGHT, 6000000,
                     mCameraPreviewThousandFps / 1000, 60, mHandler.circularEncoderCallback);
