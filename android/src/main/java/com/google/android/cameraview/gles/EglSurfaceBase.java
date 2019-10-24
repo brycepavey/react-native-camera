@@ -17,10 +17,13 @@
 package com.google.android.cameraview.gles;
 
 import android.graphics.Bitmap;
+import android.graphics.Matrix;
 import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Base64;
 import android.util.Log;
 
@@ -31,16 +34,16 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-/**
- * Common base class for EGL surfaces.
- * <p>
- * There can be multiple surfaces associated with a single context.
- */
 public class EglSurfaceBase {
     protected static final String TAG = GlUtil.TAG;
 
@@ -50,6 +53,12 @@ public class EglSurfaceBase {
     private EGLSurface mEGLSurface = EGL14.EGL_NO_SURFACE;
     private int mWidth = -1;
     private int mHeight = -1;
+    static final int DEFAULT_THREAD_POOL_SIZE = 60;
+    private int bufferSize = -1;
+    private ByteBuffer buf;
+
+    private ExecutorService currentExecutor = Executors.newWorkStealingPool(DEFAULT_THREAD_POOL_SIZE);
+//    private ExecutorService currentExecutor = Executors.newSingleThreadExecutor();
 
     protected EglSurfaceBase(EglCore eglCore) {
         mEglCore = eglCore;
@@ -68,8 +77,11 @@ public class EglSurfaceBase {
 
         // Don't cache width/height here, because the size of the underlying surface can change
         // out from under us (see e.g. HardwareScalerActivity).
-        //mWidth = mEglCore.querySurface(mEGLSurface, EGL14.EGL_WIDTH);
-        //mHeight = mEglCore.querySurface(mEGLSurface, EGL14.EGL_HEIGHT);
+        int targetWidth = mEglCore.querySurface(mEGLSurface, EGL14.EGL_WIDTH);
+        int targetHeight = mEglCore.querySurface(mEGLSurface, EGL14.EGL_HEIGHT);
+        bufferSize = targetWidth * targetWidth * 4;
+        buf = ByteBuffer.allocateDirect(bufferSize);
+        buf.order(ByteOrder.LITTLE_ENDIAN);
     }
 
     /**
@@ -82,6 +94,19 @@ public class EglSurfaceBase {
         mEGLSurface = mEglCore.createOffscreenSurface(width, height);
         mWidth = width;
         mHeight = height;
+
+        checkBufferSize();
+    }
+
+    private void checkBufferSize()
+    {
+        int targetSize = getWidth() * getHeight() * 4;
+        if (targetSize != bufferSize)
+        {
+            bufferSize = targetSize;
+            buf = ByteBuffer.allocateDirect(bufferSize);
+            buf.order(ByteOrder.LITTLE_ENDIAN);
+        }
     }
 
     /**
@@ -148,6 +173,8 @@ public class EglSurfaceBase {
         return result;
     }
 
+
+
     /**
      * Sends the presentation time stamp to EGL.
      *
@@ -157,54 +184,81 @@ public class EglSurfaceBase {
         mEglCore.setPresentationTime(mEGLSurface, nsecs);
     }
 
-    public HashMap<String, String> base64Image()
+
+
+    public void base64Image(final Base64Callback callback)
     {
         if (!mEglCore.isCurrent(mEGLSurface)) {
             throw new RuntimeException("Expected EGL context/surface is not current");
         }
-
-        int width = getWidth();
-        int height = getHeight();
-        ByteBuffer buf = ByteBuffer.allocateDirect(width * height * 4);
-        buf.order(ByteOrder.LITTLE_ENDIAN);
-        GLES20.glReadPixels(0, 0, width, height,
+        checkBufferSize();
+        GLES20.glReadPixels(0, 0, getWidth(), getHeight(),
                 GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buf);
         GlUtil.checkGlError("glReadPixels");
         buf.rewind();
-        byte[] bytes = buf.array();
-        ByteArrayOutputStream outStream = new ByteArrayOutputStream();
-        BufferedOutputStream bos = null;
-
-//        String base64Data = null;
-        String base64DataThumbnail = null;
-        HashMap<String, String> dictionary = null;
+//        ByteArrayOutputStream outStream = new ByteArrayOutputStream();
+//        BufferedOutputStream bos = null;
         try {
-            ByteArrayOutputStream ba = new ByteArrayOutputStream();
-            ByteArrayOutputStream bat = new ByteArrayOutputStream();
-            Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            bmp.copyPixelsFromBuffer(buf);
-//            boolean _result = bmp.compress(Bitmap.CompressFormat.JPEG, 90, ba);
-            Bitmap thumbnail = Bitmap.createScaledBitmap(bmp, 200, 200, false);
-            boolean _resultT = thumbnail.compress(Bitmap.CompressFormat.JPEG, 90, bat);
-//            base64Data = Base64.encodeToString(ba.toByteArray(), Base64.NO_WRAP);
-            base64DataThumbnail = Base64.encodeToString(bat.toByteArray(), Base64.NO_WRAP);
-            dictionary = new HashMap<>();
-//            dictionary.put("frameData", base64Data);
-            dictionary.put("thumbnail", base64DataThumbnail);
-            bmp.recycle();
+
+            final Bitmap bmp_initial = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+            bmp_initial.copyPixelsFromBuffer(buf);
+            buf.rewind();
+            buf.clear();
+//            buf = null;
+            currentExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+
+                    final HashMap<String, String> dictionary = new HashMap<>();
+                    ByteArrayOutputStream ba = new ByteArrayOutputStream();
+                    ByteArrayOutputStream bat = new ByteArrayOutputStream();
+
+                    Matrix matrix = new Matrix();
+                    matrix.postRotate(180);
+                    matrix.postScale(-1, 1, bmp_initial.getWidth()/2, bmp_initial.getHeight()/2);
+
+                    Bitmap bmp = Bitmap.createBitmap(bmp_initial, 0, 0, bmp_initial.getWidth(), bmp_initial.getHeight(), matrix, true);
+                    bmp_initial.recycle();
+                    boolean _result = bmp.compress(Bitmap.CompressFormat.JPEG, 90, ba);
+                    Bitmap thumbnail = Bitmap.createScaledBitmap(bmp, 200, 200, false);
+                    bmp.recycle();
+                    boolean _resultT = thumbnail.compress(Bitmap.CompressFormat.JPEG, 90, bat);
+                    thumbnail.recycle();
+                    String base64Data = null;
+                    String base64DataThumbnail = null;
+                    base64Data = Base64.encodeToString(ba.toByteArray(), Base64.NO_WRAP);
+                    base64DataThumbnail = Base64.encodeToString(bat.toByteArray(), Base64.NO_WRAP);
+                    dictionary.put("frameData", base64Data);
+                    dictionary.put("thumbnail", base64DataThumbnail);
+                        try {
+                            ba.flush();
+                            bat.flush();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+
+
+                    ba.reset();
+                    bat.reset();
+
+
+                    // Get a handler that can be used to post to the main thread
+                    Handler uiHandler = new Handler(Looper.getMainLooper());
+                    Runnable myRunnable = new Runnable() {
+                        @Override
+                        public void run() {
+                            callback.onResponse(dictionary);
+                        } // This is your code
+                    };
+                    uiHandler.post(myRunnable);
+                }
+            });
+
         } catch (Exception e) {
             e.printStackTrace();
-        }finally {
-            if (bos != null) {
-                try {
-                    bos.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
 
-        return dictionary;
+        }
+//        return dictionary;
     }
 
     private static byte[] readFileToByteArray(File file){

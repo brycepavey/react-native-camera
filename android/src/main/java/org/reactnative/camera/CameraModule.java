@@ -227,8 +227,7 @@ public class CameraModule extends ReactContextBaseJavaModule {
         });
     }
 
-    
-    
+
     @ReactMethod
     public void resumePreview(final int viewTag) {
         final ReactApplicationContext context = getReactApplicationContext();
@@ -328,7 +327,7 @@ public class CameraModule extends ReactContextBaseJavaModule {
               final RNCameraView cameraView;
               try {
                   cameraView = (RNCameraView) nativeViewHierarchyManager.resolveView(viewTag);
-                  cameraView.generateVideo(options, promise);
+                  cameraView.generateProvisionalVideo(options, promise);
               } catch (Exception e) {
                   e.printStackTrace();
               }

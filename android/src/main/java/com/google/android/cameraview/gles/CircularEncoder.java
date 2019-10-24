@@ -17,6 +17,8 @@
 package com.google.android.cameraview.gles;
 
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
@@ -24,13 +26,24 @@ import android.media.MediaMuxer;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.util.Base64;
 import android.util.Log;
 import android.view.Surface;
+
+import com.google.android.cameraview.BitmapUtils;
+
+import org.jcodec.api.SequenceEncoder;
+import org.jcodec.common.model.ColorSpace;
+import org.jcodec.common.model.Picture;
+import org.jcodec.scale.BitmapUtil;
 
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.List;
 
 /**
  * Encodes video in a fixed-size circular buffer.
@@ -56,7 +69,7 @@ public class CircularEncoder {
     private static final String MIME_TYPE = "video/avc";    // H.264 Advanced Video Coding
     private static final int IFRAME_INTERVAL = 1;           // sync frame every second
 
-    private EncoderThread mEncoderThread;
+    public EncoderThread mEncoderThread;
     private Surface mInputSurface;
     private MediaCodec mEncoder;
 
@@ -72,6 +85,9 @@ public class CircularEncoder {
          */
         void fileSaveComplete(int status);
 
+
+        void updatedFileSaveComplete(int status);
+
         /**
          * Called occasionally.
          *
@@ -81,6 +97,17 @@ public class CircularEncoder {
 
 
         void clearingBuffer(long timeCleared);
+    }
+
+    private class ProvisionalFile
+    {
+        public File targetFile;
+        public List frames;
+        public ProvisionalFile(File file, List list)
+        {
+            frames = list;
+            targetFile = file;
+        }
     }
 
     /**
@@ -199,6 +226,15 @@ public class CircularEncoder {
         handler.sendMessage(handler.obtainMessage(
                 EncoderThread.EncoderHandler.MSG_SAVE_VIDEO, outputFile));
     }
+
+
+    public boolean saveCustomVideo(File outputFile, List frames) {
+//        Handler handler = mEncoderThread.getHandler();
+        return mEncoderThread.saveVideoWithFrames(frames, outputFile);
+//        handler.sendMessage(handler.obtainMessage(
+//                EncoderThread.EncoderHandler.MSG_SAVE_OFFLINE_VIDEO, new ProvisionalFile(outputFile, frames)));
+    }
+
 
     /**
      * Object that encapsulates the encoder thread.
@@ -426,6 +462,85 @@ public class CircularEncoder {
             mCallback.fileSaveComplete(result);
         }
 
+        public boolean saveVideoWithFrames(List frames, File outputFile)
+        {
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+//            MediaMuxer muxer = null;
+            HashMap<String, Object> firstEntry = (HashMap<String, Object>) frames.get(0);
+            long firstTimestamp = (long)firstEntry.get("milliseconds");
+            int result = -1;
+            int index = 0;
+            try {
+//...
+                SequenceEncoder enc = SequenceEncoder.createSequenceEncoder(outputFile,30);
+// GOP size will be supported in 0.2
+// enc.getEncoder().setKeyInterval(25);
+//                for(...) {
+//                    BufferedImage image = ... // Obtain an image to encode
+//                    enc.encodeImage(image);
+//                }
+
+
+//                muxer = new MediaMuxer(outputFile.getPath(),
+//                        MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+//                int videoTrack = muxer.addTrack(mEncodedFormat);
+//                muxer.start();
+
+                do {
+                    HashMap<String, Object> targetEntry = (HashMap<String, Object>) frames.get(index);
+                    long timestamp = (long)targetEntry.get("milliseconds");
+                    info.offset = 0;
+                    info.presentationTimeUs =  (timestamp -firstTimestamp) * 1000;
+
+                    byte[] decodedString = Base64.decode( (String)targetEntry.get("frameData"), Base64.DEFAULT);
+                    Bitmap decodedByte = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+//                    ByteBuffer buf = BitmapUtils.convertBitmapToByteBuffer(decodedByte);
+//
+//                    int width = decodedByte.getWidth();
+//                    int height = decodedByte.getHeight();
+//                    int testSize = decodedByte.getByteCount();
+//
+//                    int size = decodedByte.getRowBytes() * decodedByte.getHeight();
+//                    ByteBuffer byteBuffer = ByteBuffer.allocate(size);
+//                    decodedByte.copyPixelsToBuffer(byteBuffer);
+//                    byte[] byteArray = byteBuffer.array();
+////                    decodedByte.copyPixelsToBuffer();
+//                    info.size = decodedByte.getByteCount();
+////                    d
+//                    byte[][] array2D = new byte[decodedByte.getHeight()][decodedByte.getWidth()];
+//
+//                    for(int i = 0 ; i < height ; i++)
+//                    {
+//                        for(int j = 0 ; j < width ; j++)
+//                        {
+//                            array2D[i][j] = byteArray[i * width + j];
+//                        }
+//                    }
+
+                    Picture pic = BitmapUtil.fromBitmap(decodedByte);
+                    enc.encodeNativeFrame(pic);
+                    index++;
+                } while (index < frames.size());
+                enc.finish();
+                result = 0;
+            } catch (Exception ioe) {
+                Log.w(TAG, "muxer failed", ioe);
+                result = 2;
+            } finally {
+//                if (muxer != null) {
+//                    muxer.stop();
+//                    muxer.release();
+//                }
+            }
+
+            if (VERBOSE) {
+                Log.d(TAG, "muxer stopped, result=" + result);
+            }
+//            mCallback.updatedFileSaveComplete(result);
+
+            return result == 0;
+        }
+
         /**
          * Tells the Looper to quit.
          */
@@ -443,6 +558,7 @@ public class CircularEncoder {
         private static class EncoderHandler extends Handler {
             public static final int MSG_FRAME_AVAILABLE_SOON = 1;
             public static final int MSG_SAVE_VIDEO = 2;
+            public static final int MSG_SAVE_OFFLINE_VIDEO = 4;
             public static final int MSG_SHUTDOWN = 3;
 
             // This shouldn't need to be a weak ref, since we'll go away when the Looper quits,
@@ -478,6 +594,10 @@ public class CircularEncoder {
                         break;
                     case MSG_SHUTDOWN:
                         encoderThread.shutdown();
+                        break;
+                    case MSG_SAVE_OFFLINE_VIDEO:
+                        ProvisionalFile provisionalFile = (ProvisionalFile) msg.obj;
+                        encoderThread.saveVideoWithFrames( provisionalFile.frames, provisionalFile.targetFile);
                         break;
                     default:
                         throw new RuntimeException("unknown message " + what);

@@ -22,6 +22,10 @@ android {
   compileSdkVersion safeExtGet('compileSdkVersion', 26)
   buildToolsVersion safeExtGet('buildToolsVersion', '26.0.2')
 
+  configurations.all {
+    resolutionStrategy.force 'com.google.code.findbugs:jsr305:3.0.2'
+  }
+
   defaultConfig {
     minSdkVersion safeExtGet('minSdkVersion', 16)
     targetSdkVersion safeExtGet('targetSdkVersion', 26)
@@ -40,7 +44,7 @@ repositories {
   }
 
   maven { url "https://repository.liferay.com/nexus/service/local/repositories/xuggle/content/"}
-  maven { url "https://jitpack.io" }
+//  maven { url "https://jitpack.io" }
   maven { url "http://www.dcm4che.org/maven2/"}
   maven {
     // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
@@ -51,7 +55,6 @@ repositories {
 dependencies {
   compileOnly 'com.facebook.react:react-native:+'
   compileOnly 'com.facebook.infer.annotation:infer-annotation:+'
-  compile files('libs/xuggler.jar')
   implementation "com.google.zxing:core:3.3.0"
   implementation "com.drewnoakes:metadata-extractor:2.9.1"
   implementation "com.google.android.gms:play-services-vision:${safeExtGet('googlePlayServicesVersion', '15.0.2')}"

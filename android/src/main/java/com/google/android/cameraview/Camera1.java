@@ -27,16 +27,19 @@ import android.opengl.GLES20;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
+import android.support.annotation.NonNull;
 import android.support.v4.util.SparseArrayCompat;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 
+import com.facebook.react.bridge.NativeMap;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.WritableNativeMap;
+import com.google.android.cameraview.gles.Base64Callback;
 import com.google.android.cameraview.gles.CameraUtils;
 import com.google.android.cameraview.gles.CircularEncoder;
 import com.google.android.cameraview.gles.EglCore;
@@ -50,11 +53,16 @@ import org.json.JSONException;
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
 
 
 @SuppressWarnings("deprecation")
@@ -103,6 +111,7 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
     private int mCameraPreviewThousandFps;
 
     private File mOutputFile;
+    private File mProvisionalFile;
     private CircularEncoder mCircEncoder;
     private WindowSurface mEncoderSurface;
     private boolean mFileSaveInProgress;
@@ -147,9 +156,11 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
     {
         @Override   // SurfaceTexture.OnFrameAvailableListener; runs on arbitrary thread
         public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-            Log.d(TAG, "frame available");
-            surfaceTexture.getTimestamp();
-            mHandler.sendEmptyMessage(Camera1.MainHandler.MSG_FRAME_AVAILABLE);
+
+                Log.d(TAG, "frame available");
+                surfaceTexture.getTimestamp();
+                mHandler.sendEmptyMessage(Camera1.MainHandler.MSG_FRAME_AVAILABLE);
+
         }
     };
 
@@ -160,7 +171,7 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
             Log.d(TAG, "surfaceCreated holder=" + holder);
 
             // Set up everything that requires an EGL context.
-            //
+
             // We had to wait until we had a surface because you can't make an EGL context current
             // without one, and creating a temporary 1x1 pbuffer is a waste of time.
             //
@@ -200,6 +211,7 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
         public static final int MSG_BLINK_TEXT = 0;
         public static final int MSG_FRAME_AVAILABLE = 1;
         public static final int MSG_FILE_SAVE_COMPLETE = 2;
+        public static final int MSG_OFFLINE_FILE_SAVE_COMPLETE = 4;
         public static final int MSG_BUFFER_STATUS = 3;
 
         public CircularEncoder.Callback circularEncoderCallback = new CircularEncoder.Callback(){
@@ -208,6 +220,11 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
             @Override
             public void fileSaveComplete(int status) {
                 sendMessage(obtainMessage(MSG_FILE_SAVE_COMPLETE, status, 0, null));
+            }
+
+            @Override
+            public void updatedFileSaveComplete(int status) {
+                sendMessage(obtainMessage(MSG_OFFLINE_FILE_SAVE_COMPLETE, status, 0, null));
             }
 
             // CircularEncoder.Callback, called on encoder thread
@@ -221,6 +238,8 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
             public void clearingBuffer(long timeCleared) {
 
             }
+
+
 
 
         };
@@ -265,6 +284,10 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
                     activity.fileSaveComplete(msg.arg1);
                     break;
                 }
+                case MSG_OFFLINE_FILE_SAVE_COMPLETE: {
+                    activity.offlineFileSaveCompleted(msg.arg1);
+                    break;
+                }
                 case MSG_BUFFER_STATUS: {
                     long duration = (((long) msg.arg1) << 32) |
                             (((long) msg.arg2) & 0xffffffffL);
@@ -279,11 +302,25 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
 
     private void AddFrame(HashMap frameMap)
     {
-        if (mFramesArray.size() >= 1000)
-        {
-            mFramesArray.removeFromStart(1001- mFramesArray.size());
-        }
+        purgeFrameArray(false);
         mFramesArray.addLast(frameMap);
+    }
+
+    private void purgeFrameArray(boolean precise)
+    {
+        if(mFramesArray.size() <= 2 || mSecondsOfVideo <= 1)
+        {
+            return;
+        }
+
+        long lastFrame = (long) mFramesArray.getLast().get("milliseconds");
+        double targetTime = precise ? mSecondsOfVideo : Math.ceil(mSecondsOfVideo);
+        double minimumTime = lastFrame - (targetTime) * 1000;
+
+        while(mFramesArray.size() > 0 && (long)mFramesArray.getFirst().get("milliseconds") < minimumTime )
+        {
+            mFramesArray.popFirst();
+        }
     }
 
 
@@ -308,23 +345,28 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
         mDisplaySurface.swapBuffers();
 
         // Send it to the video encoder.
-        if (!mFileSaveInProgress) {
+        if (!mFileSaveInProgress && mIsRecording) {
             mEncoderSurface.makeCurrent();
             GLES20.glViewport(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
             mFullFrameBlit.drawFrame(mTextureId, mTmpMatrix);
             mCircEncoder.frameAvailableSoon();
 
-            long timestamp = mCameraTexture.getTimestamp();
+            final long timestamp = mCameraTexture.getTimestamp();
             mEncoderSurface.setPresentationTime(timestamp);
             mEncoderSurface.swapBuffers();
-            HashMap base64Image = mEncoderSurface.base64Image();
-            if (base64Image !=  null)
-            {
-                HashMap<String, Object> frameData = new HashMap<String, Object>();
-                frameData.putAll(base64Image);
-                frameData.put("milliseconds", timestamp/1000000);
+            mEncoderSurface.base64Image(new Base64Callback() {
+                @Override
+                public void onResponse(HashMap<String, String> base64Image) {
+                    if (base64Image !=  null)
+                    {
+                        HashMap<String, Object> frameData = new HashMap<String, Object>();
+                        frameData.putAll(base64Image);
+                        frameData.put("milliseconds", timestamp/1000000);
+                        Camera1.this.AddFrame(frameData);
+                    }
+                }
+            });
 
-            }
         }
 
         mFrameNum++;
@@ -333,7 +375,8 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
     /**
      * The file save has completed.  We can resume recording.
      */
-    private void fileSaveComplete(int status) {
+    private void fileSaveComplete(int status)
+    {
         Log.d(TAG, "fileSaveComplete " + status);
         if (!mFileSaveInProgress) {
             throw new RuntimeException("WEIRD: got fileSaveCmplete when not in progress");
@@ -341,10 +384,30 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
         mFileSaveInProgress = false;
 
         String targetFile = Uri.fromFile(mOutputFile).toString();
-
+        purgeFrameArray(true);
         List<HashMap<String, Object>> frames = mFramesArray.allItems();
+        final HashMap lastItem = frames.get(frames.size()-1);
+        final long lastMillisecond = (long)lastItem.get("milliseconds");
+        frames.removeIf(new Predicate<HashMap<String, Object>>() {
+            @Override
+            public boolean test(HashMap<String, Object> n) {
+                return (Long) n.get("milliseconds") >= lastMillisecond - mSecondsOfVideo;
+            }
+        });
 
-        JSONArray newArray = new JSONArray(frames);
+        List<HashMap<String, Object>> filteredFrames = new ArrayList<HashMap<String, Object>>();
+
+        for (int i = 0; i < frames.size(); i++) {
+
+            // accessing each element of array
+            HashMap current = frames.get(i);
+            HashMap newMap = new HashMap(current);
+            newMap.remove("frameData");
+//            current.remove("frameData");
+            filteredFrames.add(newMap);
+        }
+
+        JSONArray newArray = new JSONArray(filteredFrames);
 
         final WritableMap response = new WritableNativeMap();
         response.putString("type", "RecordedFrames");
@@ -356,6 +419,11 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
         }
 
         mCallback.onReceiveStream(response);
+    }
+
+    private void offlineFileSaveCompleted(int status)
+    {
+//        mCallback.on
     }
 
     private void updateBufferStatus(long durationUsec) {
@@ -520,6 +588,8 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
 
     private boolean mIsScanning;
 
+    private Context mCurrentContext;
+
     private SurfaceTexture mPreviewTexture;
 
     Camera1(Callback callback, SurfaceViewPreview preview, Context context) {
@@ -570,6 +640,7 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
             }
         });
 
+        mCurrentContext = context;
         mHandler = new Camera1.MainHandler(this);
 //        mHandler.sendEmptyMessageDelayed(MainHandler.MSG_BLINK_TEXT, 1500);
         String filePath = context.getFilesDir().getPath().toString() + "/temp.mp4";
@@ -601,9 +672,9 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
         }
         mShowingPreview = false;
         if (mMediaRecorder != null) {
-            mMediaRecorder.stop();
-            mMediaRecorder.release();
-            mMediaRecorder = null;
+//            mMediaRecorder.stop();
+//            mMediaRecorder.release();
+//            mMediaRecorder = null;
 
             if (mIsRecording) {
                 int deviceOrientation = displayOrientationToOrientationEnum(mDeviceOrientation);
@@ -809,9 +880,63 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
 
     }
 
+    List<HashMap<String, Object>> filterFrames(final double start, final double end)
+    {
+        List<HashMap<String, Object>> allItems = new ArrayList<HashMap<String, Object>>(mFramesArray.allItems());
+        allItems.removeIf(new Predicate<HashMap<String, Object>>() {
+            @Override
+            public boolean test(HashMap<String, Object> stringObjectHashMap) {
+                long lastFrame = (long) stringObjectHashMap.get("milliseconds");
+                return !(lastFrame >= start && lastFrame <= end);
+            }
+        });
+
+        return allItems;
+    }
+
     @Override
     void generateProvisionalVideo(ReadableMap options, Promise promise)
     {
+        if (!options.hasKey("startTimestamp") || !options.hasKey("endTimestamp"))
+        {
+            promise.reject("incomplete parameters", "one or more parameters are missing");
+            return;
+        }
+
+        double startTimeStamp = options.getDouble("startTimestamp");
+        double endTimeStamp = options.getDouble("endTimestamp");
+
+        List frames = filterFrames(startTimeStamp, endTimeStamp);
+//        mCircEncoder.shutdown();
+//        try {
+//            mCircEncoder = new CircularEncoder(VIDEO_WIDTH, VIDEO_HEIGHT, 6000000, mCameraPreviewThousandFps / 1000, (int)Math.max( Math.ceil((endTimeStamp - startTimeStamp)/1000), 2), mHandler.circularEncoderCallback);
+//        } catch (IOException ioe) {
+//            promise.reject(ioe);
+//            throw new RuntimeException(ioe);
+//        }
+
+        String filePath = this.mCurrentContext.getFilesDir().getPath().toString() + "/provisional.mp4";
+        mProvisionalFile = new File(filePath);
+        boolean result = mCircEncoder.saveCustomVideo(mProvisionalFile, frames);
+
+        if(result)
+        {
+            WritableMap response = new WritableNativeMap();
+            response.putString("type", "outputfile");
+            response.putString("filepath", Uri.fromFile(mProvisionalFile).toString());
+            promise.resolve(response);
+        } else {
+            promise.reject("UNABLE TO PRODUCE OUTPUTFILE", "Error producing output video file");
+        }
+
+//        NSDictionary *eventRecordedFrames = @{
+////        @"type" : @"OutputFile",
+////        @"filepath" : filePath
+////    };
+////        resolve(eventRecordedFrames);
+
+
+
 
     }
 
@@ -961,11 +1086,10 @@ class Camera1 extends CameraViewImpl implements MediaRecorder.OnInfoListener,
 //            if (mCamera != null) {
 //                mCamera.lock();
 //            }
-
+            mIsRecording = false;
             mCallback.onFetchingStream();
             mFileSaveInProgress = true;
             mCircEncoder.saveVideo(mOutputFile);
-
         }
     }
 
